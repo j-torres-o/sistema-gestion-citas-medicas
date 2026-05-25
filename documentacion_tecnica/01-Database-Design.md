@@ -16,9 +16,73 @@ Para el **Sistema de Gestión de Citas Médicas (SGCM)** en producción, la pers
 
 ---
 
-## 2. Esquema Físico DDL (PostgreSQL)
+## 2. Diagrama de la Arquitectura de Base de Datos (DER)
 
-El siguiente script de inicialización crea la estructura relacional e inyecta las restricciones de exclusión necesarias. Se requiere la extensión `btree_gist` para poder mezclar tipos primitivos como `UUID` con tipos de rango en el índice espacial GIST.
+El siguiente Diagrama Entidad-Relación (DER) ilustra el modelado lógico de la persistencia de datos, las relaciones y la cardinalidad entre los componentes del sistema clínico, la lista de espera y los logs transaccionales inmutables:
+
+```mermaid
+erDiagram
+    ESPECIALIDADES {
+        UUID id_especialidad PK
+        VARCHAR nombre UNIQUE
+        TEXT descripcion
+    }
+    MEDICOS {
+        UUID id_medico PK
+        VARCHAR numero_licencia UNIQUE
+        VARCHAR nombre_completo
+        UUID id_especialidad FK
+        INTERVAL duracion_defecto
+    }
+    PACIENTES {
+        UUID id_paciente PK
+        VARCHAR dni UNIQUE
+        VARCHAR nombre_completo
+        VARCHAR telefono
+        VARCHAR email UNIQUE
+    }
+    CITAS {
+        UUID id_cita PK
+        UUID id_medico FK
+        UUID id_paciente FK
+        TSTZRANGE rango_cita
+        VARCHAR estado
+    }
+    COLA_ESPERA {
+        UUID id_espera PK
+        UUID id_paciente FK
+        UUID id_especialidad FK
+        VARCHAR tipo_cola
+        DATERANGE rango_deseado
+        VARCHAR estado
+    }
+    HISTORIAL_CITAS {
+        UUID id_historial PK
+        UUID id_cita FK
+        VARCHAR estado_anterior
+        VARCHAR estado_nuevo
+        VARCHAR tipo_accion
+        VARCHAR realizado_por
+        VARCHAR usuario_identificador
+        TEXT detalle
+        TIMESTAMP created_at
+    }
+
+    ESPECIALIDADES ||--|{ MEDICOS : "pertenece"
+    MEDICOS ||--o{ CITAS : "atiende"
+    PACIENTES ||--o{ CITAS : "agenda"
+    PACIENTES ||--o{ COLA_ESPERA : "se registra"
+    ESPECIALIDADES ||--o{ COLA_ESPERA : "solicita"
+    CITAS ||--o{ HISTORIAL_CITAS : "registra cambios"
+```
+
+---
+
+## 3. Esquema Físico DDL (PostgreSQL)
+
+El siguiente script de inicialización crea la estructura relacional e inyecta las restricciones de exclusión. Se requiere la extensión `btree_gist` para poder mezclar tipos primitivos como `UUID` con tipos de rango en el índice GIST.
+
+Incluye la tabla robustecida de **Historial de Citas (`appointments_history`)** para registrar cada cambio de estado, quién lo realizó (Paciente, Médico, Recepcionista, o automáticamente el Sistema) y qué campos fueron modificados para auditoría inmutable.
 
 ```sql
 -- Habilitar extensiones necesarias
@@ -87,21 +151,29 @@ CREATE TABLE waiting_list (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Tabla de Logs de Auditoría Inmutables
-CREATE TABLE audit_logs (
-    id_log UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    usuario_email VARCHAR(150) NOT NULL,
-    operacion VARCHAR(50) NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
-    detalle TEXT NOT NULL,
+-- 6. Tabla de Historial y Auditoría Transaccional de Citas (Inmutable)
+CREATE TABLE appointments_history (
+    id_historial UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_cita UUID NOT NULL REFERENCES appointments(id_cita) ON DELETE CASCADE,
+    estado_anterior VARCHAR(50) 
+        CONSTRAINT chk_est_ant CHECK (estado_anterior IN ('Agendada', 'Confirmada', 'EnCurso', 'Finalizada', 'Cancelada', 'NoAsistio', NULL)),
+    estado_nuevo VARCHAR(50) NOT NULL
+        CONSTRAINT chk_est_nue CHECK (estado_nuevo IN ('Agendada', 'Confirmada', 'EnCurso', 'Finalizada', 'Cancelada', 'NoAsistio')),
+    tipo_accion VARCHAR(50) NOT NULL -- 'Creación', 'Asignación', 'Modificación', 'Cancelación'
+        CONSTRAINT chk_tipo_accion CHECK (tipo_accion IN ('Creacion', 'Asignacion', 'Modificacion', 'Cancelacion')),
+    realizado_por VARCHAR(50) NOT NULL -- 'Paciente', 'Recepcionista', 'Medico', 'Sistema'
+        CONSTRAINT chk_realizado_por CHECK (realizado_por IN ('Paciente', 'Recepcionista', 'Medico', 'Sistema')),
+    usuario_identificador VARCHAR(150) NOT NULL, -- Email o DNI del usuario de la acción, o 'SYSTEM'
+    detalle TEXT, -- Detalle del cambio (ej: "Reprogramado slot de 14:00 a 15:30")
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 ---
 
-## 3. Optimización del Rendimiento en Producción
+## 4. Optimización del Rendimiento en Producción
 
-### 3.1. Mitigación del Costo del Índice GIST (Write Amplification)
+### 4.1. Mitigación del Costo del Índice GIST (Write Amplification)
 Los índices GIST imponen una sobrecarga de escritura debido a la complejidad espacial. Para mitigar esto, implementamos un **índice parcial** enfocado únicamente en optimizar la búsqueda de citas activas o futuras:
 
 ```sql
@@ -110,7 +182,7 @@ CREATE INDEX idx_active_appointments ON appointments USING GIST (rango_cita)
 WHERE lower(rango_cita) > NOW() - INTERVAL '30 days';
 ```
 
-### 3.2. Configuración Agresiva de Autovacuum
+### 4.2. Configuración Agresiva de Autovacuum
 El agendamiento y liberación constante de citas médicas produce fragmentación rápida y tuplas muertas en la base de datos (Bloat). Para evitar la degradación del rendimiento, la tabla `appointments` se configurará con un ciclo de autovacuum altamente receptivo:
 
 ```sql
@@ -121,10 +193,10 @@ ALTER TABLE appointments SET (
 );
 ```
 
-### 3.3. Índices Complementarios B-Tree
+### 4.3. Índices Complementarios B-Tree
 Para agilizar las búsquedas en los módulos de login, filtros de pacientes y auditoría:
 ```sql
 CREATE INDEX idx_patients_dni ON patients(dni);
 CREATE INDEX idx_waiting_list_status ON waiting_list(estado) WHERE estado = 'Pendiente';
-CREATE INDEX idx_audit_logs_date ON audit_logs(created_at DESC);
+CREATE INDEX idx_appointments_history_cita ON appointments_history(id_cita);
 ```
