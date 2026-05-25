@@ -23,49 +23,49 @@ El siguiente Diagrama Entidad-Relación (DER) ilustra el modelado lógico de la 
 ```mermaid
 erDiagram
     ESPECIALIDADES {
-        UUID id_especialidad PK
-        VARCHAR nombre UNIQUE
-        TEXT descripcion
+        uuid id_especialidad PK
+        varchar nombre
+        text descripcion
     }
     MEDICOS {
-        UUID id_medico PK
-        VARCHAR numero_licencia UNIQUE
-        VARCHAR nombre_completo
-        UUID id_especialidad FK
-        INTERVAL duracion_defecto
+        uuid id_medico PK
+        varchar numero_licencia
+        varchar nombre_completo
+        uuid id_especialidad FK
+        interval duracion_defecto
     }
     PACIENTES {
-        UUID id_paciente PK
-        VARCHAR dni UNIQUE
-        VARCHAR nombre_completo
-        VARCHAR telefono
-        VARCHAR email UNIQUE
+        uuid id_paciente PK
+        varchar dni
+        varchar nombre_completo
+        varchar telefono
+        varchar email
     }
     CITAS {
-        UUID id_cita PK
-        UUID id_medico FK
-        UUID id_paciente FK
-        TSTZRANGE rango_cita
-        VARCHAR estado
+        uuid id_cita PK
+        uuid id_medico FK
+        uuid id_paciente FK
+        tstzrange rango_cita
+        varchar estado
     }
     COLA_ESPERA {
-        UUID id_espera PK
-        UUID id_paciente FK
-        UUID id_especialidad FK
-        VARCHAR tipo_cola
-        DATERANGE rango_deseado
-        VARCHAR estado
+        uuid id_espera PK
+        uuid id_paciente FK
+        uuid id_especialidad FK
+        varchar tipo_cola
+        daterange rango_deseado
+        varchar estado
     }
     HISTORIAL_CITAS {
-        UUID id_historial PK
-        UUID id_cita FK
-        VARCHAR estado_anterior
-        VARCHAR estado_nuevo
-        VARCHAR tipo_accion
-        VARCHAR realizado_por
-        VARCHAR usuario_identificador
-        TEXT detalle
-        TIMESTAMP created_at
+        uuid id_historial PK
+        uuid id_cita FK
+        varchar estado_anterior
+        varchar estado_nuevo
+        varchar tipo_accion
+        varchar realizado_por
+        varchar usuario_identificador
+        text detalle
+        timestamp created_at
     }
 
     ESPECIALIDADES ||--|{ MEDICOS : "pertenece"
@@ -73,7 +73,7 @@ erDiagram
     PACIENTES ||--o{ CITAS : "agenda"
     PACIENTES ||--o{ COLA_ESPERA : "se registra"
     ESPECIALIDADES ||--o{ COLA_ESPERA : "solicita"
-    CITAS ||--o{ HISTORIAL_CITAS : "registra cambios"
+    CITAS ||--o{ HISTORIAL_CITAS : "registra"
 ```
 
 ---
@@ -155,16 +155,12 @@ CREATE TABLE waiting_list (
 CREATE TABLE appointments_history (
     id_historial UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     id_cita UUID NOT NULL REFERENCES appointments(id_cita) ON DELETE CASCADE,
-    estado_anterior VARCHAR(50) 
-        CONSTRAINT chk_est_ant CHECK (estado_anterior IN ('Agendada', 'Confirmada', 'EnCurso', 'Finalizada', 'Cancelada', 'NoAsistio', NULL)),
-    estado_nuevo VARCHAR(50) NOT NULL
-        CONSTRAINT chk_est_nue CHECK (estado_nuevo IN ('Agendada', 'Confirmada', 'EnCurso', 'Finalizada', 'Cancelada', 'NoAsistio')),
-    tipo_accion VARCHAR(50) NOT NULL -- 'Creación', 'Asignación', 'Modificación', 'Cancelación'
-        CONSTRAINT chk_tipo_accion CHECK (tipo_accion IN ('Creacion', 'Asignacion', 'Modificacion', 'Cancelacion')),
-    realizado_por VARCHAR(50) NOT NULL -- 'Paciente', 'Recepcionista', 'Medico', 'Sistema'
-        CONSTRAINT chk_realizado_por CHECK (realizado_por IN ('Paciente', 'Recepcionista', 'Medico', 'Sistema')),
-    usuario_identificador VARCHAR(150) NOT NULL, -- Email o DNI del usuario de la acción, o 'SYSTEM'
-    detalle TEXT, -- Detalle del cambio (ej: "Reprogramado slot de 14:00 a 15:30")
+    estado_anterior VARCHAR(20) CHECK (estado_anterior IN ('Agendada', 'Confirmada', 'EnCurso', 'Finalizada', 'Cancelada', 'NoAsistio')),
+    estado_nuevo VARCHAR(20) NOT NULL CHECK (estado_nuevo IN ('Agendada', 'Confirmada', 'EnCurso', 'Finalizada', 'Cancelada', 'NoAsistio')),
+    tipo_accion VARCHAR(20) NOT NULL CHECK (tipo_accion IN ('Creacion', 'Asignacion', 'Modificacion', 'Cancelacion')),
+    realizado_por VARCHAR(20) NOT NULL CHECK (realizado_por IN ('Paciente', 'Recepcionista', 'Medico', 'Sistema')),
+    usuario_identificador VARCHAR(150) NOT NULL, -- Email o DNI de quien ejecuta, o 'SYSTEM'
+    cambios JSONB DEFAULT '{}'::jsonb, -- Diferencial de cambios (ej: {"rango_cita": {"old": "[start, end]", "new": "[start, end]"}})
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -173,13 +169,16 @@ CREATE TABLE appointments_history (
 
 ## 4. Optimización del Rendimiento en Producción
 
-### 4.1. Mitigación del Costo del Índice GIST (Write Amplification)
-Los índices GIST imponen una sobrecarga de escritura debido a la complejidad espacial. Para mitigar esto, implementamos un **índice parcial** enfocado únicamente en optimizar la búsqueda de citas activas o futuras:
+### 4.1. Índices GIST para Intervalos Temporales (Concurrencia)
+Los índices GIST permiten a PostgreSQL optimizar de forma asombrosa las búsquedas y restricciones espaciales/temporales (como el solapamiento de intervalos `&&`). 
+
+> [!NOTE]
+> **Nota de Diseño Físico (Zonas Horarias e Inmutabilidad):**
+> En PostgreSQL, los predicados de índices parciales (la cláusula `WHERE`) exigen el uso de funciones estrictamente **inmutables** (deterministas). Funciones dinámicas como `NOW()` o `CURRENT_TIMESTAMP` son clasificadas como **volátiles** porque cambian en cada ejecución, por lo cual no se permiten en índices parciales para evitar inconsistencias físicas en disco. En consecuencia, implementamos el índice GIST completo sobre el rango:
 
 ```sql
--- Índice parcial GIST para citas activas (futuras o del último mes)
-CREATE INDEX idx_active_appointments ON appointments USING GIST (rango_cita)
-WHERE lower(rango_cita) > NOW() - INTERVAL '30 days';
+-- Índice GIST completo sobre el rango de la cita
+CREATE INDEX IF NOT EXISTS idx_active_appointments ON appointments USING GIST (rango_cita);
 ```
 
 ### 4.2. Configuración Agresiva de Autovacuum
@@ -193,10 +192,54 @@ ALTER TABLE appointments SET (
 );
 ```
 
-### 4.3. Índices Complementarios B-Tree
-Para agilizar las búsquedas en los módulos de login, filtros de pacientes y auditoría:
+### 4.3. Índices de Alto Rendimiento para Historial y Auditoría
+Para mitigar el impacto de crecimiento exponencial de la tabla `appointments_history`, se implementan los siguientes índices B-Tree específicos:
+
 ```sql
-CREATE INDEX idx_patients_dni ON patients(dni);
-CREATE INDEX idx_waiting_list_status ON waiting_list(estado) WHERE estado = 'Pendiente';
-CREATE INDEX idx_appointments_history_cita ON appointments_history(id_cita);
+-- Índice compuesto: Acelera de forma instantánea la obtención del historial de una cita sin ordenar en memoria
+CREATE INDEX IF NOT EXISTS idx_history_cita_fecha ON appointments_history(id_cita, created_at DESC);
+
+-- Índice en pacientes para login y búsquedas de DNI
+CREATE INDEX IF NOT EXISTS idx_patients_dni ON patients(dni);
+
+-- Índice parcial en lista de espera para procesar únicamente registros activos de forma rápida
+CREATE INDEX IF NOT EXISTS idx_waiting_list_status ON waiting_list(estado) WHERE estado = 'Pendiente';
 ```
+
+---
+
+## 5. Estrategia de Escalabilidad Futura (Producción a Gran Escala)
+
+> [!IMPORTANT]
+> **Decisión de Diseño Físico: Particionamiento Mensual por Rango**
+> *   **En Desarrollo/Staging Actual:** La tabla `appointments_history` se mantiene sin particionar. Añadir particionamiento de forma prematura introduce una sobrecomplejidad innecesaria de jobs programados para crear particiones con antelación en PostgreSQL local y desactiva la garantía de unicidad global de claves primarias UUID nativas.
+> *   **En Producción (Crecimiento > 5M de filas):** Se recomienda activar el **Particionamiento Declarativo por Rango (`PARTITION BY RANGE`)** sobre la columna `created_at` con granularidad **mensual**.
+
+### 5.1. DDL de Particionamiento Propuesto para Producción:
+```sql
+-- 1. Tabla padre particionada (La PK debe incluir la columna de partición)
+CREATE TABLE appointments_history_partitioned (
+    id_historial UUID NOT NULL,
+    id_cita UUID NOT NULL,
+    estado_anterior VARCHAR(20),
+    estado_nuevo VARCHAR(20) NOT NULL,
+    tipo_accion VARCHAR(20) NOT NULL,
+    realizado_por VARCHAR(20) NOT NULL,
+    usuario_identificador VARCHAR(150) NOT NULL,
+    cambios JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_historial, created_at)
+) PARTITION BY RANGE (created_at);
+
+-- 2. Creación de una partición mensual de muestra (Enero 2026)
+CREATE TABLE appointments_history_y2026_m01 PARTITION OF appointments_history_partitioned
+    FOR VALUES FROM ('2026-01-01 00:00:00+00') TO ('2026-02-01 00:00:00+00');
+
+-- 3. Partición DEFAULT de resguardo (Evita caídas del sistema si no se crea a tiempo una partición)
+CREATE TABLE appointments_history_default PARTITION OF appointments_history_partitioned DEFAULT;
+```
+
+### 5.2. Beneficios de la Estrategia a Escala:
+1.  **Partition Pruning:** El motor de PostgreSQL ignorará físicamente las particiones que no correspondan al rango de fecha consultado, agilizando consultas históricas.
+2.  **Ciclo de Vida de Datos (Data Lifecycle Management):** Para purgar registros de más de 3 años, el sistema ejecutará un comando `DROP TABLE` instantáneo sobre la partición del mes antiguo, liberando espacio en disco de forma atómica y con cero fragmentación (*heap bloat*), a diferencia de un costoso comando `DELETE`.
+

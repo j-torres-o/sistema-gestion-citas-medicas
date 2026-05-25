@@ -50,7 +50,7 @@ class Database:
         Obtiene una conexión activa del pool.
         """
         cls._init_pool()
-        return cls._pool.get_conn()
+        return cls._pool.getconn()
 
     @classmethod
     def release_connection(cls, connection):

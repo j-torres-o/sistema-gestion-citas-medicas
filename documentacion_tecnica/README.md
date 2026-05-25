@@ -14,7 +14,7 @@ Para evitar la saturación del contexto y permitir un trabajo a profundidad en c
 *   Esquema lógico-relacional normalizado.
 *   Uso de tipos avanzados (`tstzrange` y la extensión `btree_gist`).
 *   Restricción de exclusión física para evitar solapamientos a nivel de motor.
-*   Configuración de `autovacuum` e índices GIST parciales para optimizar la performance de escritura.
+*   Configuración de `autovacuum` e índices GIST de intervalos temporales para optimizar la performance.
 
 ### 🧠 [Capítulo 2: Lógica de Negocio y Motor de Lista de Espera](02-Business-Logic.md)
 *   Algoritmo detallado de asignación automática de citas (FIFO priorizado).
