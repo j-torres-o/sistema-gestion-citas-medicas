@@ -1158,3 +1158,132 @@ input:focus, select:focus, textarea:focus {
         width: 100%;
     }
 }
+
+/* ============================================================================
+   13. ESTILOS ADICIONALES PARA PORTAL PACIENTE (MODAL, GRID Y AUTOCOMPLETADO)
+   ============================================================================ */
+
+/* Estilos de la grilla del Dashboard del Paciente */
+.patient-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+}
+
+/* Modal de Configuración Premium */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(11, 15, 25, 0.65); /* Opacidad oscura premium */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1500;
+    backdrop-filter: blur(8px); /* Efecto Glassmorphism premium */
+    transition: opacity 0.25s ease;
+}
+
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-premium);
+    width: 90%;
+    max-width: 550px;
+    padding: 30px;
+    animation: modal-zoom-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: var(--contrast-border);
+}
+
+@keyframes modal-zoom-in {
+    from { transform: scale(0.92); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1.5px solid var(--border);
+    padding-bottom: 12px;
+}
+
+.modal-header h2 {
+    font-size: 22px;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-primary);
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    min-width: 48px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.modal-close-btn:hover {
+    color: var(--danger);
+}
+
+.modal-body {
+    margin-bottom: 24px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    border-top: 1.5px solid var(--border);
+    padding-top: 16px;
+}
+
+/* Modificaciones de Alto Contraste para el Modal */
+.theme-contraste .modal {
+    background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+.theme-contraste .modal-content {
+    border: 3px solid #FFFF00 !important;
+    background-color: #000000 !important;
+    color: #FFFF00 !important;
+}
+
+.theme-contraste .modal-close-btn {
+    color: #FFFF00 !important;
+    border: 2px solid #FFFF00 !important;
+}
+
+.theme-contraste .modal-close-btn:hover {
+    background-color: #FFFF00 !important;
+    color: #000000 !important;
+}
+
+/* Soporte para el dropdown de autocompletado en el Modal */
+.autocomplete-dropdown {
+    box-shadow: var(--shadow-premium);
+    background-color: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.theme-contraste .autocomplete-dropdown {
+    border: 2px solid #FFFF00 !important;
+    background-color: #000000 !important;
+}
+

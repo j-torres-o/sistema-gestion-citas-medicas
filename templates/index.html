@@ -76,15 +76,58 @@
             <!-- ==================================================================== -->
             <!-- VISTA B: PORTAL DEL PACIENTE (WIZARD ACCESIBLE) -->
             <!-- ==================================================================== -->
+            <!-- ==================================================================== -->
+            <!-- VISTA B: PORTAL DEL PACIENTE (DASHBOARD Y WIZARD) -->
+            <!-- ==================================================================== -->
             <section id="patient-view" class="view-panel hidden">
-                <div class="patient-grid">
-                    <!-- Panel de Asistente de Agendamiento (Wizard) -->
+                <!-- Panel A: Dashboard Principal (Home) -->
+                <div id="patient-dashboard-panel">
+                    <div class="welcome-card" style="margin-bottom: 24px; padding: 24px; border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--border); border: var(--contrast-border);">
+                        <h2 style="font-size: 26px; margin-bottom: 6px;">Panel de Control de Salud</h2>
+                        <p class="subtitle" style="margin-bottom: 20px; font-size: 15px;">Gestiona tus citas médicas, consulta autorizaciones vigentes y administra tus solicitudes en lista de espera.</p>
+                        
+                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" id="btn-show-booking-wizard" onclick="showBookingWizard()" style="min-height: 52px; padding: 12px 28px; font-size: 16px; font-weight: 700; text-transform: none; letter-spacing: normal;">📅 Reservar Nueva Cita Médica</button>
+                            <button class="btn btn-secondary" id="btn-open-profile-modal" onclick="openProfileModal()" style="min-height: 52px; padding: 12px 28px; font-size: 16px; font-weight: 700; text-transform: none; letter-spacing: normal;">👤 Editar Perfil y Datos Personales</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Grilla Central de 3 Columnas para las Listas -->
+                    <div class="patient-dashboard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+                        <div class="info-card">
+                            <h3>Citas Médicas Activas</h3>
+                            <div class="list-container" id="patient-active-appointments">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <h3>Autorizaciones Médicas</h3>
+                            <p class="sidebar-help">Permiten agendar citas múltiples recurrentes sin la restricción de doble reserva activa.</p>
+                            <div class="list-container" id="patient-medical-authorizations">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <h3>Solicitudes en Lista de Espera (LEA)</h3>
+                            <div class="list-container" id="patient-waitlist-requests">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel B: Asistente de Agendamiento (Wizard - Oculto por defecto) -->
+                <div id="patient-wizard-panel" class="hidden">
                     <div class="wizard-card">
-                        <div class="wizard-header">
-                            <h2>Reservar Nueva Cita Médica</h2>
+                        <div class="wizard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px;">
+                            <div style="display: flex; align-items: center; gap: 16px;">
+                                <button class="btn btn-secondary" onclick="hideBookingWizard()" style="min-height: 48px; height: 48px; padding: 4px 16px; font-size: 14px; text-transform: none; letter-spacing: normal;">⬅️ Volver al Panel</button>
+                                <h2 style="margin: 0; font-size: 24px;">Reservar Nueva Cita Médica</h2>
+                            </div>
                             <div class="speech-controls">
-                                <button class="btn btn-speech" id="btn-speech-assist" onclick="toggleSpeechAssist()">🔊 Activar Asistencia por Voz</button>
-                                <button class="btn btn-mic hidden" id="btn-mic-record" onclick="toggleMicRecord()">🎙️ Dictar DNI/Siguiente</button>
+                                <button class="btn btn-speech" id="btn-speech-assist" onclick="toggleSpeechAssist()" style="text-transform: none; letter-spacing: normal;">🔊 Activar Asistencia por Voz</button>
                             </div>
                         </div>
 
@@ -173,54 +216,9 @@
                                 <h3>¡Tu cita ha sido confirmada con éxito!</h3>
                                 <p id="wizard-confirm-text"></p>
                                 <button class="btn btn-primary" onclick="restartWizard()">📅 Reservar Otra Cita</button>
+                                <button class="btn btn-secondary" onclick="hideBookingWizard()" style="margin-left:12px; text-transform: none; letter-spacing: normal;">⬅️ Volver al Panel</button>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Panel de Información del Paciente (Citas, Autorizaciones y Lista de Espera) -->
-                    <div class="info-sidebar">
-                        <div class="info-card">
-                            <h3>Mis Citas Médicas Activas</h3>
-                            <div class="list-container" id="patient-active-appointments">
-                                <!-- Inyectado dinámicamente -->
-                            </div>
-                        </div>
-
-                        <div class="info-card">
-                            <h3>Mis Autorizaciones Médicas</h3>
-                            <p class="sidebar-help">Permiten agendar citas múltiples recurrentes sin la restricción de doble reserva activa.</p>
-                            <div class="list-container" id="patient-medical-authorizations">
-                                <!-- Inyectado dinámicamente -->
-                            </div>
-                        </div>
-
-                        <div class="info-card">
-                            <h3>Mis Solicitudes en Lista de Espera (LEA)</h3>
-                            <div class="list-container" id="patient-waitlist-requests">
-                                <!-- Inyectado dinámicamente -->
-                            </div>
-                        </div>
-
-                         <div class="info-card" id="patient-profile-card">
-                             <h3>Mi Perfil y Residencia</h3>
-                             <p class="sidebar-help">Actualiza tu lugar de residencia y tu sede preferida en caso de mudanza para priorizar tus búsquedas.</p>
-                             
-                             <div class="form-group" style="margin-bottom:12px;">
-                                 <label for="profile-city" style="font-size:12px; font-weight:700;">Ciudad de Residencia:</label>
-                                 <select id="profile-city" onchange="onProfileCityChange()" style="min-height:36px; height:36px; padding:4px 8px; font-size:12px; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-main); color:var(--text-main);">
-                                     <!-- Inyectado dinámicamente -->
-                                 </select>
-                             </div>
-                             
-                             <div class="form-group" style="margin-bottom:16px;">
-                                 <label for="profile-branch" style="font-size:12px; font-weight:700;">Sede Preferida:</label>
-                                 <select id="profile-branch" style="min-height:36px; height:36px; padding:4px 8px; font-size:12px; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-main); color:var(--text-main);">
-                                     <!-- Inyectado dinámicamente -->
-                                 </select>
-                             </div>
-                             
-                             <button class="btn btn-primary btn-block" onclick="updatePatientProfileSubmit()" style="min-height:36px; height:36px; font-size:12px; padding:4px 8px;">💾 Guardar Residencia</button>
-                         </div>
                     </div>
                 </div>
             </section>
@@ -321,7 +319,7 @@
                     <!-- Sala de Espera Activa -->
                     <div class="medico-main">
                         <div class="waiting-room-card">
-                            <h2>Mi Sala de Espera Virtual (Admisiones de Hoy)</h2>
+                            <h2>Sala de Espera Virtual (Admisiones de Hoy)</h2>
                             <p class="subtitle">Lista de pacientes admitidos en esta sede en orden de hora de cita.</p>
                             <div class="waiting-patients-list" id="medico-waiting-patients-list">
                                 <!-- Inyectado dinámicamente -->
@@ -462,6 +460,47 @@
             </section>
         </main>
         
+        <!-- Modal de Perfil y Datos Personales -->
+        <div id="profile-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Editar Perfil y Datos Personales</h2>
+                    <button class="modal-close-btn" onclick="closeProfileModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p class="subtitle" style="margin-bottom: 16px; font-size:14px;">Actualiza tu lugar de residencia, sede preferida y datos de contacto.</p>
+                    
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label for="profile-phone">Número de Teléfono:</label>
+                        <input type="text" id="profile-phone" placeholder="Ej: 555-2201 o 3001234567" style="min-height:44px; height:44px; padding:8px 12px; font-size:14px;">
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label for="profile-email">Correo Electrónico:</label>
+                        <input type="email" id="profile-email" placeholder="Ej: carmen.rojas@email.com" style="min-height:44px; height:44px; padding:8px 12px; font-size:14px;">
+                    </div>
+                    
+                    <!-- Autocompletado de Ciudad con Departamento -->
+                    <div class="form-group" style="margin-bottom:12px; position:relative;">
+                        <label for="profile-city-input">Ciudad de Residencia:</label>
+                        <input type="text" id="profile-city-input" placeholder="Comienza a escribir tu ciudad (ej. Medellín)..." autocomplete="off" oninput="onProfileCityInput()" style="min-height:44px; height:44px; padding:8px 12px; font-size:14px;">
+                        <div id="profile-city-autocomplete" class="autocomplete-dropdown hidden" style="top: 100%;"></div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label for="profile-branch">Sede Clínica Preferida:</label>
+                        <select id="profile-branch" style="min-height:44px; height:44px; padding:8px 12px; font-size:14px; background: var(--bg-main); color: var(--text-primary); border: 1.5px solid var(--border);">
+                            <!-- Inyectado dinámicamente -->
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:12px;">
+                    <button class="btn btn-secondary" onclick="closeProfileModal()" style="min-height:44px; height:44px; padding:8px 16px; font-size:14px; text-transform:none; letter-spacing:normal;">Cancelar</button>
+                    <button class="btn btn-primary" onclick="updatePatientProfileSubmit()" style="min-height:44px; height:44px; padding:8px 16px; font-size:14px; text-transform:none; letter-spacing:normal;">💾 Guardar Datos</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Notificación Toast global para avisos accesibles -->
         <div id="toast-notification" class="toast hidden"></div>
     </div>

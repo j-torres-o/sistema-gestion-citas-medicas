@@ -52,9 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('sgcm-theme') || 'claro';
     setTheme(savedTheme);
     
-    // Inicializar Web Speech API
-    initSpeechRecognition();
-    
     // Pre-cargar voces asíncronas para consistencia de voz femenina
     if (window.speechSynthesis) {
         window.speechSynthesis.onvoiceschanged = () => {
@@ -183,96 +180,33 @@ function logout() {
     document.getElementById('btn-logout').classList.add('hidden');
     
     // Desactivar voz
-    if (state.speech.recognitionActive) {
-        toggleMicRecord();
-    }
     state.speech.synthesisActive = false;
-    document.getElementById('btn-speech-assist').innerText = '[🔊 Activar Asistencia por Voz]';
-    document.getElementById('btn-mic-record').classList.add('hidden');
+    const btnSpeech = document.getElementById('btn-speech-assist');
+    if (btnSpeech) {
+        btnSpeech.innerText = '🔊 Activar Asistencia por Voz';
+        btnSpeech.classList.remove('btn-primary');
+    }
     
     showToast('Sesión cerrada correctamente.', 'success');
     showView('login-view');
 }
 
-// 5. ASISTENCIA POR VOZ Y ACCESIBILIDAD (WEB SPEECH API)
-function initSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        console.warn('La API de Reconocimiento de Voz no está soportada en este navegador.');
-        return;
-    }
-    
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.lang = 'es-ES';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    
-    recognition.onstart = () => {
-        state.speech.recognitionActive = true;
-        document.getElementById('btn-mic-record').innerText = '🔴 Escuchando...';
-        document.getElementById('btn-mic-record').style.backgroundColor = '#EF4444';
-    };
-    
-    recognition.onend = () => {
-        state.speech.recognitionActive = false;
-        document.getElementById('btn-mic-record').innerText = '🎙️ Dictar DNI/Siguiente';
-        document.getElementById('btn-mic-record').style.backgroundColor = '';
-    };
-    
-    recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.trim().toLowerCase();
-        console.log('[SPEECH REC] Recibido:', transcript);
-        showToast(`Escuchado: "${transcript}"`, 'info');
-        handleVoiceCommand(transcript);
-    };
-    
-    recognition.onerror = (event) => {
-        console.error('[SPEECH REC] Error:', event.error);
-        if (event.error === 'not-allowed') {
-            showToast('Acceso al micrófono denegado. Por favor, permite el acceso al micrófono en la barra de direcciones de tu navegador para usar el dictado.', 'warning');
-        } else if (event.error !== 'no-speech') {
-            showToast(`Error de micrófono: ${event.error}`, 'error');
-        }
-    };
-    
-    state.speech.recognition = recognition;
-}
-
+// 5. ASISTENCIA POR VOZ Y ACCESIBILIDAD (SÍNTESIS DE VOZ DE SOPORTE)
 function toggleSpeechAssist() {
     state.speech.synthesisActive = !state.speech.synthesisActive;
     const btn = document.getElementById('btn-speech-assist');
-    const btnMic = document.getElementById('btn-mic-record');
     
     if (state.speech.synthesisActive) {
-        btn.innerText = '🔇 Desactivar Asistencia por Voz';
-        btn.classList.add('btn-primary');
-        btnMic.classList.remove('hidden');
+        if (btn) {
+            btn.innerText = '🔇 Desactivar Asistencia por Voz';
+            btn.classList.add('btn-primary');
+        }
         speakText('Asistencia por voz activada. Te guiaré paso a paso.');
         announceWizardStep();
     } else {
-        btn.innerText = '🔊 Activar Asistencia por Voz';
-        btn.classList.remove('btn-primary');
-        btnMic.classList.add('hidden');
-        if (state.speech.recognitionActive) {
-            toggleMicRecord();
-        }
-    }
-}
-
-function toggleMicRecord() {
-    if (!state.speech.recognition) {
-        showToast('El reconocimiento de voz no está disponible.', 'error');
-        return;
-    }
-    
-    if (state.speech.recognitionActive) {
-        state.speech.recognition.stop();
-    } else {
-        try {
-            state.speech.recognition.start();
-        } catch (e) {
-            console.error(e);
+        if (btn) {
+            btn.innerText = '🔊 Activar Asistencia por Voz';
+            btn.classList.remove('btn-primary');
         }
     }
 }
@@ -409,8 +343,11 @@ async function loadPatientDashboard() {
     state.wizard.selectedSlot = null;
     state.wizard.availableSlots = [];
     
-    // Renderizar pasos visuales
-    updateWizardUI();
+    // Configurar paneles SPA iniciales (Dashboard Home visible, Wizard oculto)
+    const dashPanel = document.getElementById('patient-dashboard-panel');
+    const wizPanel = document.getElementById('patient-wizard-panel');
+    if (dashPanel) dashPanel.classList.remove('hidden');
+    if (wizPanel) wizPanel.classList.add('hidden');
     
     // Cargar Catálogos Core y Listas Auxiliares de forma paralela
     try {
@@ -424,9 +361,8 @@ async function loadPatientDashboard() {
         
         renderSpecialtiesGrid();
         renderBranchesGrid();
-        initPatientProfileUI(); // Inicializar UI de perfil de residencia
         
-        // Cargar listas del Paciente en el Sidebar
+        // Cargar listas del Paciente en el Dashboard
         await refreshPatientSidebarLists();
         
         if (state.speech.synthesisActive) {
@@ -1025,41 +961,171 @@ function announceWizardStep() {
     }
 }
 
-// Funciones de Configuración de Perfil y Residencia del Paciente
-function initPatientProfileUI() {
-    const citySelect = document.getElementById('profile-city');
-    if (!citySelect) return;
-    
-    // Obtener ciudades únicas
-    const cities = [...new Set(state.branches.map(b => b.ciudad))];
-    
-    citySelect.innerHTML = '';
-    cities.forEach(city => {
-        const opt = document.createElement('option');
-        opt.value = city;
-        opt.innerText = city;
-        citySelect.appendChild(opt);
-    });
-    
-    // Seleccionar ciudad de residencia del paciente actual
-    if (state.session && state.session.ciudad_origen) {
-        citySelect.value = state.session.ciudad_origen;
+function showBookingWizard() {
+    const dashPanel = document.getElementById('patient-dashboard-panel');
+    const wizPanel = document.getElementById('patient-wizard-panel');
+    if (dashPanel) dashPanel.classList.add('hidden');
+    if (wizPanel) {
+        wizPanel.classList.remove('hidden');
+        restartWizard(); // Reiniciar al primer paso
     }
-    
-    onProfileCityChange();
 }
 
-function onProfileCityChange() {
-    const citySelect = document.getElementById('profile-city');
+function hideBookingWizard() {
+    const dashPanel = document.getElementById('patient-dashboard-panel');
+    const wizPanel = document.getElementById('patient-wizard-panel');
+    if (wizPanel) wizPanel.classList.add('hidden');
+    if (dashPanel) {
+        dashPanel.classList.remove('hidden');
+        refreshPatientSidebarLists(); // Recargar listas de citas
+    }
+}
+
+// ============================================================================
+// 6.5. CONFIGURACIÓN DE PERFIL, DATOS PERSONALES Y GEOGRAFÍA COLOMBIANA
+// ============================================================================
+
+// Diccionario de Geografía Colombiana para Autocompletado Premium
+const colombiaGeography = [
+    { ciudad: "Medellin", departamento: "Antioquia" },
+    { ciudad: "Envigado", departamento: "Antioquia" },
+    { ciudad: "Itagui", departamento: "Antioquia" },
+    { ciudad: "Bello", departamento: "Antioquia" },
+    { ciudad: "Rionegro", departamento: "Antioquia" },
+    { ciudad: "Sabaneta", departamento: "Antioquia" },
+    { ciudad: "Bogota", departamento: "Bogota D.C." },
+    { ciudad: "Cali", departamento: "Valle del Cauca" },
+    { ciudad: "Palmira", departamento: "Valle del Cauca" },
+    { ciudad: "Buga", departamento: "Valle del Cauca" },
+    { ciudad: "Barranquilla", departamento: "Atlantico" },
+    { ciudad: "Cartagena", departamento: "Bolivar" },
+    { ciudad: "Bucaramanga", departamento: "Santander" },
+    { ciudad: "Floridablanca", departamento: "Santander" },
+    { ciudad: "Pereira", departamento: "Risaralda" },
+    { ciudad: "Manizales", departamento: "Caldas" },
+    { ciudad: "Armenia", departamento: "Quindio" },
+    { ciudad: "Ibague", departamento: "Tolima" },
+    { ciudad: "Neiva", departamento: "Huila" },
+    { ciudad: "Santa Marta", departamento: "Magdalena" },
+    { ciudad: "Monteria", departamento: "Cordoba" },
+    { ciudad: "Sincelejo", departamento: "Sucre" },
+    { ciudad: "Cucuta", departamento: "Norte de Santander" },
+    { ciudad: "Villavicencio", departamento: "Meta" },
+    { ciudad: "Pasto", departamento: "Narino" },
+    { ciudad: "Popayan", departamento: "Cauca" }
+];
+
+// Abrir el Modal de Perfil cargando los datos sensibles de forma diferida (Seguridad)
+async function openProfileModal() {
+    const modal = document.getElementById('profile-modal');
+    if (!modal) return;
+    
+    modal.classList.remove('hidden');
+    
+    // Cargar datos en caliente del servidor
+    const pId = state.session.id_perfil_clinico;
+    try {
+        const response = await fetch(`/api/patient/profile?id_paciente=${pId}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            showToast(data.error || 'Error al obtener tus datos personales.', 'error');
+            return;
+        }
+        
+        // Cargar campos en el Modal
+        document.getElementById('profile-phone').value = data.telefono || '';
+        document.getElementById('profile-email').value = data.email || '';
+        document.getElementById('profile-city-input').value = data.ciudad_origen || '';
+        
+        // Cargar sedes asociadas a esa ciudad en caliente
+        updateProfileBranchSelect(data.ciudad_origen, data.id_sede);
+        
+    } catch (e) {
+        showToast('Error de comunicación con el servidor al cargar perfil.', 'error');
+    }
+}
+
+// Cerrar Modal
+function closeProfileModal() {
+    const modal = document.getElementById('profile-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    // Ocultar dropdown de autocompletado por si quedó abierto
+    const autocomplete = document.getElementById('profile-city-autocomplete');
+    if (autocomplete) {
+        autocomplete.classList.add('hidden');
+    }
+}
+
+// Reactividad al escribir la ciudad en el Modal (Autocompletado Geográfico)
+function onProfileCityInput() {
+    const input = document.getElementById('profile-city-input');
+    const dropdown = document.getElementById('profile-city-autocomplete');
+    if (!input || !dropdown) return;
+    
+    const query = normalizeText(input.value.trim());
+    dropdown.innerHTML = '';
+    
+    if (query.length < 2) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+    
+    // Filtrar coincidencias
+    const matches = colombiaGeography.filter(geo => 
+        normalizeText(geo.ciudad).includes(query) || 
+        normalizeText(geo.departamento).includes(query)
+    );
+    
+    if (matches.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+    
+    dropdown.classList.remove('hidden');
+    matches.forEach(geo => {
+        const item = document.createElement('div');
+        item.className = 'autocomplete-item';
+        item.style.padding = '8px 12px';
+        item.style.cursor = 'pointer';
+        item.style.borderBottom = '1px solid var(--border)';
+        
+        item.innerHTML = `
+            <div class="autocomplete-item-name" style="font-weight:700; font-size:13px;">📍 ${geo.ciudad}</div>
+            <div class="autocomplete-item-dni" style="font-size:11px; color:var(--text-secondary);">Departamento: ${geo.departamento}</div>
+        `;
+        
+        item.onclick = () => {
+            input.value = geo.ciudad;
+            dropdown.classList.add('hidden');
+            // Cargar las sedes en cascada para la ciudad seleccionada
+            updateProfileBranchSelect(geo.ciudad, null);
+        };
+        
+        dropdown.appendChild(item);
+    });
+}
+
+// Actualizar las opciones del select de sedes en el Modal
+function updateProfileBranchSelect(city, selectedSedeId) {
     const branchSelect = document.getElementById('profile-branch');
-    if (!citySelect || !branchSelect) return;
-    
-    const selectedCity = citySelect.value;
-    
-    // Filtrar sedes por esa ciudad
-    const branchesInCity = state.branches.filter(b => b.ciudad === selectedCity);
+    if (!branchSelect) return;
     
     branchSelect.innerHTML = '';
+    
+    // Filtrar sedes registradas en esa ciudad
+    const branchesInCity = state.branches.filter(b => normalizeText(b.ciudad) === normalizeText(city));
+    
+    if (branchesInCity.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.innerText = '-- No hay sedes en esta ciudad --';
+        branchSelect.appendChild(opt);
+        return;
+    }
+    
     branchesInCity.forEach(b => {
         const opt = document.createElement('option');
         opt.value = b.id_sede;
@@ -1067,25 +1133,38 @@ function onProfileCityChange() {
         branchSelect.appendChild(opt);
     });
     
-    // Seleccionar la sede actual del paciente si corresponde a esta ciudad
-    if (state.session && state.session.id_sede) {
-        const hasBranch = branchesInCity.some(b => String(b.id_sede) === String(state.session.id_sede));
-        if (hasBranch) {
-            branchSelect.value = state.session.id_sede;
-        }
+    if (selectedSedeId) {
+        branchSelect.value = selectedSedeId;
     }
 }
 
+// Guardar los datos de contacto, residencia y geografía (Transaccional)
 async function updatePatientProfileSubmit() {
-    const citySelect = document.getElementById('profile-city');
+    const phoneInput = document.getElementById('profile-phone');
+    const emailInput = document.getElementById('profile-email');
+    const cityInput = document.getElementById('profile-city-input');
     const branchSelect = document.getElementById('profile-branch');
-    if (!citySelect || !branchSelect) return;
     
-    const selectedCity = citySelect.value;
-    const selectedBranch = branchSelect.value;
+    if (!phoneInput || !emailInput || !cityInput || !branchSelect) return;
     
-    if (!selectedCity || !selectedBranch) {
-        showToast('Por favor, selecciona tu ciudad y sede preferida.', 'error');
+    const phone = phoneInput.value.trim();
+    const email = emailInput.value.trim();
+    const city = cityInput.value.trim();
+    const branch = branchSelect.value;
+    
+    if (!phone || !email || !city || !branch) {
+        showToast('Por favor, completa todos los campos del perfil.', 'error');
+        return;
+    }
+    
+    // Validaciones básicas del lado del cliente
+    if (phone.length < 7 || !/^\+?[\d-]+$/.test(phone)) {
+        showToast('Por favor, ingresa un número de teléfono válido (mínimo 7 dígitos).', 'error');
+        return;
+    }
+    
+    if (!/^[\w\.-]+@[\w\.-]+\.\w+$/.test(email)) {
+        showToast('El formato del correo electrónico ingresado no es válido.', 'error');
         return;
     }
     
@@ -1097,28 +1176,33 @@ async function updatePatientProfileSubmit() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 id_paciente: pId,
-                ciudad_origen: selectedCity,
-                id_sede: selectedBranch
+                ciudad_origen: city,
+                id_sede: branch,
+                telefono: phone,
+                email: email
             })
         });
         
         const data = await response.json();
         
         if (!response.ok) {
-            showToast(data.error || 'Error al actualizar tu residencia.', 'error');
+            showToast(data.error || 'Error al actualizar tu perfil.', 'error');
             speakText(`No se pudo actualizar tu perfil: ${data.error || ''}`);
             return;
         }
         
-        // Actualizar sesión en memoria
-        state.session.ciudad_origen = selectedCity;
-        state.session.id_sede = selectedBranch;
+        // Actualizar datos de sesión en memoria
+        state.session.ciudad_origen = city;
+        state.session.id_sede = branch;
         
-        speakText('Tu lugar de residencia y sede preferida han sido actualizados con éxito.');
-        showToast('Perfil de residencia actualizado con éxito.', 'success');
+        speakText('Tus datos de contacto, residencia y sede preferida han sido actualizados con éxito.');
+        showToast('Perfil actualizado con éxito.', 'success');
         
         // Re-renderizar la grilla de sedes del Wizard dinámicamente para aplicar los distintivos de residencia
         renderBranchesGrid();
+        
+        // Cerrar modal
+        closeProfileModal();
         
     } catch (e) {
         showToast('Error de comunicación con el servidor al guardar el perfil.', 'error');

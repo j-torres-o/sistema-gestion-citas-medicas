@@ -1089,18 +1089,75 @@ def get_massive_cancellations_history():
         Database.release_connection(conn)
 
 
+@app.route("/api/patient/profile", methods=["GET"])
+def get_patient_profile_secure():
+    """
+    Endpoint seguro para recuperar los datos personales del paciente (email, teléfono, ciudad)
+    bajo demanda al abrir la sección de configuración de perfil.
+    """
+    id_paciente = request.args.get("id_paciente")
+    if not id_paciente:
+        return jsonify({"error": "Debe especificar el id_paciente."}), 400
+
+    conn = Database.get_connection()
+    from psycopg2.extras import RealDictCursor
+    cursor = None
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            SELECT p.telefono, p.email, p.ciudad_origen, u.id_sede
+            FROM patients p
+            JOIN users u ON p.id_usuario = u.id_usuario
+            WHERE p.id_paciente = %s;
+            """,
+            (id_paciente,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "El perfil del paciente no fue encontrado."}), 404
+        
+        return jsonify({
+            "telefono": row["telefono"],
+            "email": row["email"],
+            "ciudad_origen": row["ciudad_origen"],
+            "id_sede": str(row["id_sede"]) if row["id_sede"] else None
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        Database.release_connection(conn)
+
+
 @app.route("/api/patient/update-profile", methods=["POST"])
 def update_patient_profile():
     """
-    Actualiza la ciudad de origen del paciente en 'patients' y su sede favorita en 'users' de forma atómica.
+    Actualiza de forma atómica y transaccional los datos de contacto y residencia
+    en la tabla 'patients' y sincroniza el email y sede en la tabla 'users'.
     """
     data = request.get_json() or {}
     id_paciente = data.get("id_paciente")
     ciudad_origen = data.get("ciudad_origen")
     id_sede = data.get("id_sede")
+    telefono = data.get("telefono")
+    email = data.get("email")
 
-    if not id_paciente or not ciudad_origen:
-        return jsonify({"error": "Parámetros obligatorios incompletos (id_paciente, ciudad_origen)."}), 400
+    if not id_paciente or not ciudad_origen or not telefono or not email:
+        return jsonify({"error": "Parámetros obligatorios incompletos (id_paciente, ciudad_origen, telefono, email)."}), 400
+
+    # 1. Validaciones del lado del servidor congruentes con el modelo de Patient
+    import re
+    email_regex = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+    if not email or not re.match(email_regex, email):
+        return jsonify({"error": "El formato del correo electrónico ingresado no es válido."}), 400
+
+    if not telefono or len(telefono.strip()) < 7 or not telefono.strip().replace('-', '').isdigit():
+        return jsonify({"error": "El número telefónico debe ser numérico y tener al menos 7 dígitos."}), 400
+
+    if not ciudad_origen or len(ciudad_origen.strip()) < 3:
+        return jsonify({"error": "La ciudad de origen es obligatoria para la validación geográfica."}), 400
 
     conn = Database.get_connection()
     conn.autocommit = False
@@ -1108,33 +1165,37 @@ def update_patient_profile():
     try:
         cursor = conn.cursor()
 
-        # 1. Obtener id_usuario asociado al paciente
-        cursor.execute("SELECT id_usuario FROM patients WHERE id_paciente = %s;", (id_paciente,))
+        # 2. Obtener id_usuario asociado al paciente
+        cursor.execute("SELECT id_usuario FROM patients WHERE id_paciente = %s FOR UPDATE;", (id_paciente,))
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "El paciente especificado no existe."}), 404
         id_usuario = row[0]
 
-        # 2. Actualizar la ciudad de origen en la tabla patients
+        # 3. Actualizar la tabla patients
         cursor.execute(
-            "UPDATE patients SET ciudad_origen = %s WHERE id_paciente = %s;",
-            (ciudad_origen, id_paciente)
+            """
+            UPDATE patients 
+            SET ciudad_origen = %s, telefono = %s, email = %s 
+            WHERE id_paciente = %s;
+            """,
+            (ciudad_origen, telefono, email, id_paciente)
         )
 
-        # 3. Actualizar la sede favorita en la tabla users
+        # 4. Actualizar la tabla users
         if id_sede:
             cursor.execute(
-                "UPDATE users SET id_sede = %s WHERE id_usuario = %s;",
-                (id_sede, id_usuario)
+                "UPDATE users SET id_sede = %s, email = %s WHERE id_usuario = %s;",
+                (id_sede, email, id_usuario)
             )
         else:
             cursor.execute(
-                "UPDATE users SET id_sede = NULL WHERE id_usuario = %s;",
-                (id_usuario,)
+                "UPDATE users SET id_sede = NULL, email = %s WHERE id_usuario = %s;",
+                (email, id_usuario)
             )
 
         conn.commit()
-        return jsonify({"success": True, "message": "Residencia y sede preferida actualizadas con éxito."})
+        return jsonify({"success": True, "message": "Perfil de residencia y datos personales actualizados con éxito."})
     except Exception as e:
         if conn:
             conn.rollback()
