@@ -21,6 +21,7 @@ const state = {
     wizard: {
         step: 1,
         selectedSpecialty: null,
+        selectedCity: null,      // Para selección en dos pasos (Ciudad ➔ Sede)
         selectedBranch: null,
         selectedSlot: null,
         availableSlots: []
@@ -53,6 +54,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Inicializar Web Speech API
     initSpeechRecognition();
+    
+    // Pre-cargar voces asíncronas para consistencia de voz femenina
+    if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = () => {
+            getFemaleSpanishVoice();
+        };
+        // Intento de precarga inmediata
+        getFemaleSpanishVoice();
+    }
     
     // Asegurar limpieza de intervals al cerrar/recargar
     window.addEventListener('beforeunload', () => {
@@ -265,23 +275,49 @@ function toggleMicRecord() {
     }
 }
 
+function getFemaleSpanishVoice() {
+    if (state.speech.selectedVoice) {
+        return state.speech.selectedVoice;
+    }
+    
+    const voices = window.speechSynthesis.getVoices();
+    const spanishVoices = voices.filter(voice => voice.lang.toLowerCase().includes('es-'));
+    
+    if (spanishVoices.length === 0) {
+        return null;
+    }
+    
+    // Lista ordenada de palabras clave femeninas comunes en motores TTS (Sabina, Helena, Lucía, María, Elena, Google, Lucia, Monica)
+    const femaleKeywords = ["sabina", "helena", "lucia", "maria", "elena", "google", "samantha", "monica", "laura", "paulina"];
+    
+    for (let kw of femaleKeywords) {
+        const matched = spanishVoices.find(voice => voice.name.toLowerCase().includes(kw));
+        if (matched) {
+            state.speech.selectedVoice = matched;
+            console.log("[SPEECH] Consistencia de voz establecida (Femenina):", matched.name);
+            return matched;
+        }
+    }
+    
+    // Fallback si no se detecta explícitamente por palabra clave
+    state.speech.selectedVoice = spanishVoices[0];
+    console.log("[SPEECH] Consistencia de voz establecida (Default):", spanishVoices[0].name);
+    return spanishVoices[0];
+}
+
 function speakText(text) {
     if (!state.speech.synthesisActive) return;
     
-    // Detener cualquier síntesis en curso
+    // Detener cualquier locución en curso
     window.speechSynthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'es-ES';
+    utterance.rate = 0.85; // Velocidad pausada y comprensible para adultos mayores
     
-    // Velocidad ligeramente más lenta (0.85) óptima para adultos mayores
-    utterance.rate = 0.85;
-    
-    // Obtener voces en español si están disponibles
-    const voices = window.speechSynthesis.getVoices();
-    const spanishVoice = voices.find(voice => voice.lang.includes('es-'));
-    if (spanishVoice) {
-        utterance.voice = spanishVoice;
+    const femaleVoice = getFemaleSpanishVoice();
+    if (femaleVoice) {
+        utterance.voice = femaleVoice;
     }
     
     window.speechSynthesis.speak(utterance);
@@ -366,6 +402,7 @@ function normalizeText(text) {
 async function loadPatientDashboard() {
     state.wizard.step = 1;
     state.wizard.selectedSpecialty = null;
+    state.wizard.selectedCity = null;
     state.wizard.selectedBranch = null;
     state.wizard.selectedSlot = null;
     state.wizard.availableSlots = [];
@@ -440,22 +477,126 @@ function renderSpecialtiesGrid() {
     });
 }
 
+function selectCity(city) {
+    state.wizard.selectedCity = city;
+    renderBranchesGrid();
+    speakText(`Seleccionado ciudad ${city}. Ahora elija la sede.`);
+}
+
+function selectBranch(id) {
+    state.wizard.selectedBranch = id;
+    renderBranchesGrid();
+    
+    setTimeout(() => {
+        nextWizardStep();
+    }, 450);
+}
+
 function renderBranchesGrid() {
     const grid = document.getElementById('branches-options-grid');
     grid.innerHTML = '';
     
-    state.branches.forEach(branch => {
-        const card = document.createElement('div');
-        card.className = `option-card ${state.wizard.selectedBranch === branch.id_sede ? 'selected' : ''}`;
-        card.id = `branch-card-${branch.id_sede}`;
-        card.onclick = () => selectBranch(branch.id_sede);
+    const pCity = state.session ? state.session.ciudad_origen : null;
+    const pSede = state.session ? state.session.id_sede : null;
+    
+    // Si no se ha seleccionado ciudad, renderizar listado de ciudades
+    if (!state.wizard.selectedCity) {
+        // Obtener ciudades únicas
+        const cities = [...new Set(state.branches.map(b => b.ciudad))];
         
-        card.innerHTML = `
-            <div class="option-card-title">${branch.nombre}</div>
-            <div class="option-card-desc">📍 ${branch.ciudad} - ${branch.direccion}</div>
+        // Ordenar ciudades poniendo la del paciente de primero
+        if (pCity) {
+            cities.sort((a, b) => {
+                const normA = normalizeText(a);
+                const normB = normalizeText(b);
+                const normPCity = normalizeText(pCity);
+                if (normA === normPCity) return -1;
+                if (normB === normPCity) return 1;
+                return a.localeCompare(b);
+            });
+        }
+        
+        // Actualizar el título de la sección dinámicamente
+        const header = document.querySelector('#wizard-step-2 h3');
+        if (header) {
+            header.innerText = 'Selecciona la Ciudad de tu Sede:';
+        }
+        
+        cities.forEach(city => {
+            const card = document.createElement('div');
+            card.className = 'option-card';
+            card.onclick = () => selectCity(city);
+            
+            // Si es la ciudad del paciente, agregar un badge de "Tu Ciudad"
+            let badge = '';
+            if (pCity && normalizeText(city) === normalizeText(pCity)) {
+                badge = '<div class="option-card-badge">🏠 Tu Ciudad de Residencia</div>';
+            }
+            
+            card.innerHTML = `
+                <div class="option-card-title">🏢 Ciudad: ${city}</div>
+                <div class="option-card-desc">Ver sedes clínicas disponibles en ${city}</div>
+                ${badge}
+            `;
+            grid.appendChild(card);
+        });
+        
+    } else {
+        // Renderizar las sedes de la ciudad seleccionada
+        const header = document.querySelector('#wizard-step-2 h3');
+        if (header) {
+            header.innerText = `Sedes clínicas disponibles en ${state.wizard.selectedCity}:`;
+        }
+        
+        // Agregar botón para volver a ciudades
+        const backCard = document.createElement('div');
+        backCard.className = 'option-card';
+        backCard.style.borderStyle = 'dashed';
+        backCard.onclick = () => {
+            state.wizard.selectedCity = null;
+            state.wizard.selectedBranch = null;
+            renderBranchesGrid();
+            speakText("Regresando al listado de ciudades.");
+        };
+        backCard.innerHTML = `
+            <div class="option-card-title">⬅️ Cambiar de Ciudad</div>
+            <div class="option-card-desc">Volver a ver todas las ciudades disponibles.</div>
         `;
-        grid.appendChild(card);
-    });
+        grid.appendChild(backCard);
+        
+        // Filtrar y ordenar sedes
+        let branchesInCity = state.branches.filter(b => normalizeText(b.ciudad) === normalizeText(state.wizard.selectedCity));
+        
+        if (normalizeText(state.wizard.selectedCity) === normalizeText(pCity)) {
+            // Ordenar poniendo la sede del paciente de primero
+            branchesInCity.sort((a, b) => {
+                if (pSede) {
+                    if (String(a.id_sede) === String(pSede)) return -1;
+                    if (String(b.id_sede) === String(pSede)) return 1;
+                }
+                return a.nombre.localeCompare(b.nombre);
+            });
+        }
+        
+        branchesInCity.forEach(branch => {
+            const card = document.createElement('div');
+            card.className = `option-card ${state.wizard.selectedBranch === branch.id_sede ? 'selected' : ''}`;
+            card.id = `branch-card-${branch.id_sede}`;
+            card.onclick = () => selectBranch(branch.id_sede);
+            
+            let badge = '';
+            if (pSede && String(branch.id_sede) === String(pSede)) {
+                badge = '<div class="option-card-badge">🏥 Tu Sede Asignada</div>';
+            }
+            
+            card.innerHTML = `
+                <div class="option-card-title">${branch.nombre}</div>
+                <div class="option-card-desc">📍 ${branch.direccion}</div>
+                ${badge}
+            `;
+            grid.appendChild(card);
+        });
+    }
 }
 
 // Renderizadores de Sidebar
@@ -479,7 +620,7 @@ function renderPatientActiveAppointments(list) {
         }
         
         item.innerHTML = `
-            <div class="list-item-title">🩺 ${apt.doctor_nombre}</div>
+            <div class="list-item-title">🩺 ${apt.especialidad_nombre} - ${apt.doctor_nombre}</div>
             <div class="list-item-meta">
                 🏢 Sede: ${apt.sede_nombre}<br>
                 📅 Fecha: ${apt.fecha} a las ${apt.hora_inicio} - ${apt.hora_fin}<br>
@@ -528,12 +669,15 @@ function renderPatientWaitlistRequests(list) {
     list.forEach(wl => {
         const item = document.createElement('div');
         item.className = 'list-item';
+        
+        const friendlyCola = wl.tipo_cola === 'FechaCercana' ? 'Fecha más cercana' : 'Rango de fechas específico';
+        
         item.innerHTML = `
             <div class="list-item-title">⏳ Especialidad: ${wl.especialidad_nombre}</div>
             <div class="list-item-meta">
                 🏢 Sede: ${wl.sede_nombre}<br>
                 📅 Rango deseado: ${wl.rango_deseado}<br>
-                <span>Cola: ${wl.tipo_cola} | Estado: <strong class="badge">${wl.estado}</strong></span><br>
+                <span>Cola: <strong>${friendlyCola}</strong><br>Estado: <strong class="badge">${wl.estado}</strong></span><br>
                 <span style="font-size:10px;">Creada: ${wl.fecha_creacion}</span>
             </div>
         `;
@@ -619,17 +763,22 @@ async function loadWizardSlots() {
         
         if (slots.length === 0) {
             container.innerHTML = `
-                <div style="grid-column: 1/-1; text-align:center; padding: 30px;">
-                    <p style="font-size:18px; font-weight:700; margin-bottom:12px;">No hay turnos disponibles para esta sede y especialidad.</p>
-                    <p class="subtitle" style="margin-bottom:0;">¿Deseas registrarte en la Lista de Espera Automática (LEA) para asignación prioritaria en caso de que alguien cancele?</p>
+                <div style="grid-column: 1/-1; text-align:center; padding: 20px;">
+                    <p style="font-size:18px; font-weight:700; margin-bottom:0;">No hay turnos disponibles para esta sede y especialidad en el día de hoy.</p>
                 </div>
             `;
-            document.getElementById('btn-register-waitlist').classList.remove('hidden');
-            speakText('No se encontraron horarios libres. Si lo deseas, puedes registrarte en la lista de espera diciendo "espera" o presionando el botón correspondiente.');
+            document.getElementById('waitlist-registration-card').classList.remove('hidden');
+            document.querySelector('input[name="waitlist-type"][value="FechaCercana"]').checked = true;
+            document.getElementById('waitlist-start-date').value = '';
+            document.getElementById('waitlist-end-date').value = '';
+            if (typeof toggleWaitlistRangeFields === 'function') {
+                toggleWaitlistRangeFields();
+            }
+            speakText('No se encontraron horarios libres. Si lo deseas, puedes registrarte en la lista de espera completando el formulario que aparece abajo.');
             return;
         }
         
-        document.getElementById('btn-register-waitlist').classList.add('hidden');
+        document.getElementById('waitlist-registration-card').classList.add('hidden');
         
         slots.forEach((slot, idx) => {
             const card = document.createElement('div');
@@ -654,8 +803,43 @@ async function loadWizardSlots() {
     }
 }
 
+function toggleWaitlistRangeFields() {
+    const waitlistType = document.querySelector('input[name="waitlist-type"]:checked').value;
+    const rangeFields = document.getElementById('waitlist-range-fields');
+    if (waitlistType === 'RangoEspecifico') {
+        rangeFields.classList.remove('hidden');
+    } else {
+        rangeFields.classList.add('hidden');
+    }
+}
+
+function formatDateString(str) {
+    if (!str) return '';
+    const parts = str.split('-');
+    if (parts.length !== 3) return str;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
 async function registerWaitlistSubmit() {
     const pId = state.session.id_perfil_clinico;
+    const waitlistType = document.querySelector('input[name="waitlist-type"]:checked').value;
+    
+    let rango_inicio = null;
+    let rango_fin = null;
+    
+    if (waitlistType === 'RangoEspecifico') {
+        const startInput = document.getElementById('waitlist-start-date').value;
+        const endInput = document.getElementById('waitlist-end-date').value;
+        
+        if (!startInput || !endInput) {
+            showToast('Por favor seleccione las fechas de inicio y fin para el rango deseado.', 'error');
+            speakText('Por favor seleccione las fechas de inicio y fin para el rango deseado.');
+            return;
+        }
+        
+        rango_inicio = startInput;
+        rango_fin = endInput;
+    }
     
     try {
         const response = await fetch('/api/waitlist/register', {
@@ -665,7 +849,9 @@ async function registerWaitlistSubmit() {
                 id_paciente: pId,
                 id_especialidad: state.wizard.selectedSpecialty,
                 id_sede: state.wizard.selectedBranch,
-                tipo_cola: 'FechaCercana'
+                tipo_cola: waitlistType,
+                rango_inicio: rango_inicio,
+                rango_fin: rango_fin
             })
         });
         
@@ -687,10 +873,15 @@ async function registerWaitlistSubmit() {
         const specName = state.specialties.find(s => s.id_especialidad === state.wizard.selectedSpecialty).nombre;
         const branchName = state.branches.find(b => b.id_sede === state.wizard.selectedBranch).nombre;
         
-        document.getElementById('wizard-confirm-text').innerHTML = `
-            Se registró con éxito tu solicitud en la <strong>Lista de Espera Automática (LEA)</strong> para la especialidad <strong>${specName}</strong> en la sede <strong>${branchName}</strong>.<br>
-            Recibirás una notificación por mensaje de texto (SMS) en cuanto un turno quede disponible y se te asigne automáticamente.
-        `;
+        let confirmText = `Se registró con éxito tu solicitud en la <strong>Lista de Espera Automática (LEA)</strong> para la especialidad <strong>${specName}</strong> en la sede <strong>${branchName}</strong>.<br>`;
+        if (waitlistType === 'RangoEspecifico') {
+            confirmText += `Buscando citas disponibles entre el <strong>${formatDateString(rango_inicio)}</strong> y el <strong>${formatDateString(rango_fin)}</strong>. `;
+        } else {
+            confirmText += `Asignación automática por orden de llegada (Fecha más cercana). `;
+        }
+        confirmText += `Recibirás una notificación por mensaje de texto (SMS) en cuanto un turno quede disponible y se te asigne automáticamente.`;
+        
+        document.getElementById('wizard-confirm-text').innerHTML = confirmText;
         
         await refreshPatientSidebarLists();
         
@@ -774,9 +965,14 @@ function prevWizardStep() {
 function restartWizard() {
     state.wizard.step = 1;
     state.wizard.selectedSpecialty = null;
+    state.wizard.selectedCity = null;
     state.wizard.selectedBranch = null;
     state.wizard.selectedSlot = null;
     state.wizard.availableSlots = [];
+    
+    // Ocultar tarjeta de lista de espera por defecto
+    const wlCard = document.getElementById('waitlist-registration-card');
+    if (wlCard) wlCard.classList.add('hidden');
     
     updateWizardUI();
     renderSpecialtiesGrid();

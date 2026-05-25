@@ -548,9 +548,11 @@ def get_patient_appointments():
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(
             """
-            SELECT a.id_cita, a.rango_cita, a.estado, d.nombre_completo as doctor_nombre, b.nombre as sede_nombre
+            SELECT a.id_cita, a.rango_cita, a.estado, d.nombre_completo as doctor_nombre, 
+                   s.nombre as especialidad_nombre, b.nombre as sede_nombre
             FROM appointments a
             JOIN doctors d ON a.id_medico = d.id_medico
+            JOIN specialties s ON d.id_especialidad = s.id_especialidad
             JOIN branches b ON a.id_sede = b.id_sede
             WHERE a.id_paciente = %s
             ORDER BY lower(a.rango_cita) DESC;
@@ -565,6 +567,7 @@ def get_patient_appointments():
             formatted.append({
                 "id_cita": str(r["id_cita"]),
                 "doctor_nombre": r["doctor_nombre"],
+                "especialidad_nombre": r["especialidad_nombre"],
                 "sede_nombre": r["sede_nombre"],
                 "fecha": lower_dt.strftime("%d/%m/%Y"),
                 "hora_inicio": lower_dt.strftime("%H:%M"),
