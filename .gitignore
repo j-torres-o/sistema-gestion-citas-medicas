@@ -1,0 +1,91 @@
+# ============================================================================
+# ARCHIVO: .gitignore
+# PROPÓSITO: Configuración de exclusiones de Git para el SGCM (Flask, Python, Node, Postgres)
+# ============================================================================
+
+# --- Entornos Virtuales de Python ---
+venv/
+.venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Byte-compiled / Optimizations (Python) ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Variables de Entorno y Secretos ---
+.env
+.flaskenv
+*.pem
+*.key
+secrets.json
+config_local.py
+
+# --- Pruebas y Aseguramiento de Calidad (Pytest/QA) ---
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.htmlcov/
+htmlcov/
+.hypothesis/
+
+# --- Base de Datos & Logs Locales ---
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+*.log
+logs/
+*.sql.bak
+*.sql.gz
+
+# --- Node.js & Frontend (Si aplica empaquetamiento) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.eslintcache
+.stylelintcache
+dist-frontend/
+
+# --- Configuración de Editores e IDEs ---
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# --- Documentacion academica y personal ---
+definicion_actividades/
+entregas/
+graficos/
+resumenes_clases/

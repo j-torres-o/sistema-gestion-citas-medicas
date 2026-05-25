@@ -1,0 +1,77 @@
+# ============================================================================
+# WORKFLOW: Integración Continua (CI) - SGCM Pipeline
+# PROPÓSITO: Ejecución automática de linters, análisis estático y pruebas unitarias
+#            en cada Push o Pull Request a develop y main en GitHub.
+# ============================================================================
+
+name: SGCM CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      # Levantar base de datos PostgreSQL de pruebas aislada
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: sgcm_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+        ports:
+          - 5432:5432
+        # Esperar a que Postgres esté listo para recibir conexiones
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    # 1. Clonar el repositorio
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    # 2. Configurar el entorno de Python
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+        cache: 'pip'
+
+    # 3. Instalar dependencias del proyecto
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest pytest-mock pytest-cov
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    # 4. Análisis estático y Linter (Flake8)
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    # 5. Ejecutar la suite de pruebas Pytest con reporte de Cobertura
+    - name: Run Tests with Pytest
+      env:
+        DATABASE_URL: postgresql://postgres:postgres_password@localhost:5432/sgcm_test
+        FLASK_ENV: testing
+      run: |
+        pytest -v --cov=. --cov-report=xml
+
+    # 6. (Opcional) Subir reporte de Cobertura a un servicio de análisis
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage.xml
+        if-no-files-found: ignore
