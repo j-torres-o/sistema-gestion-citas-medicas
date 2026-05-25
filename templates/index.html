@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGCM - Sistema de Gestión de Citas Médicas</title>
+    <!-- Importar fuentes Outfit e Inter desde Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="theme-claro">
+    <div id="app-container">
+        <!-- ==================================================================== -->
+        <!--  HEADER SUPERIOR GENERAL -->
+        <!-- ==================================================================== -->
+        <header id="main-header">
+            <div class="logo-area">
+                <span class="logo-icon">🏥</span>
+                <h1 class="logo-title">SGCM</h1>
+                <span class="logo-subtitle">Salud Integral</span>
+            </div>
+            
+            <div class="controls-area">
+                <!-- Selector de Temas Dinámicos -->
+                <div class="theme-selector">
+                    <button class="theme-btn active" id="btn-theme-claro" onclick="setTheme('claro')">☀️ Claro</button>
+                    <button class="theme-btn" id="btn-theme-oscuro" onclick="setTheme('oscuro')">🌙 Oscuro</button>
+                    <button class="theme-btn" id="btn-theme-contraste" onclick="setTheme('contraste')">♿ Contraste</button>
+                </div>
+
+                <!-- Perfil de Sesión del Usuario -->
+                <div class="session-card" id="session-card">
+                    <span id="session-username">Sin iniciar sesión</span>
+                    <button class="btn btn-logout hidden" id="btn-logout" onclick="logout()">[🚪 Salir]</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Contenedor Principal Dinámico (SPA) -->
+        <main id="main-content">
+            <!-- ==================================================================== -->
+            <!-- VISTA A: INICIO DE SESIÓN (LOGIN) -->
+            <!-- ==================================================================== -->
+            <section id="login-view" class="view-panel">
+                <div class="login-card">
+                    <h2>Ingresar al Sistema</h2>
+                    <p class="subtitle">Identifícate con tu DNI, correo electrónico o usuario asignado.</p>
+                    
+                    <div class="form-group">
+                        <label for="login-username">DNI o Correo Electrónico:</label>
+                        <input type="text" id="login-username" placeholder="Ej: 11223344 o admin@clinica.com" autocomplete="username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="login-password">Contraseña:</label>
+                        <input type="password" id="login-password" placeholder="Ingresa tu clave" autocomplete="current-password">
+                    </div>
+
+                    <div class="login-help">
+                        <p><strong>Cuentas semilla para pruebas rápidas (Clave: 123456 o admin):</strong></p>
+                        <ul>
+                            <li>Paciente: <code>11223344</code> o <code>98765432</code></li>
+                            <li>Recepcionista: <code>recep_poblado</code></li>
+                            <li>Médico General: <code>medico_carlos</code></li>
+                            <li>Administrador: <code>admin</code></li>
+                        </ul>
+                    </div>
+
+                    <button class="btn btn-primary btn-block" id="btn-login-submit" onclick="loginSubmit()">[🔑 Iniciar Sesión]</button>
+                    <div id="login-error" class="alert alert-danger hidden"></div>
+                </div>
+            </section>
+
+            <!-- ==================================================================== -->
+            <!-- VISTA B: PORTAL DEL PACIENTE (WIZARD ACCESIBLE) -->
+            <!-- ==================================================================== -->
+            <section id="patient-view" class="view-panel hidden">
+                <div class="patient-grid">
+                    <!-- Panel de Asistente de Agendamiento (Wizard) -->
+                    <div class="wizard-card">
+                        <div class="wizard-header">
+                            <h2>Reservar Nueva Cita Médica</h2>
+                            <div class="speech-controls">
+                                <button class="btn btn-speech" id="btn-speech-assist" onclick="toggleSpeechAssist()">[🔊 Activar Asistencia por Voz]</button>
+                                <button class="btn btn-mic hidden" id="btn-mic-record" onclick="toggleMicRecord()">[🎙️ Dictar DNI/Siguiente]</button>
+                            </div>
+                        </div>
+
+                        <!-- Indicador visual de pasos -->
+                        <div class="wizard-steps">
+                            <span class="step-indicator active" id="step-ind-1">1. Especialidad</span>
+                            <span class="step-indicator" id="step-ind-2">2. Sede</span>
+                            <span class="step-indicator" id="step-ind-3">3. Horario</span>
+                            <span class="step-indicator" id="step-ind-4">4. Confirmación</span>
+                        </div>
+
+                        <!-- PASO 1: Elegir Especialidad -->
+                        <div class="wizard-step-panel" id="wizard-step-1">
+                            <h3>Selecciona la Especialidad Médica:</h3>
+                            <div class="options-grid" id="specialties-options-grid">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+
+                        <!-- PASO 2: Elegir Sede -->
+                        <div class="wizard-step-panel hidden" id="wizard-step-2">
+                            <h3>Selecciona la Sede Clínica de tu Ciudad:</h3>
+                            <div class="options-grid" id="branches-options-grid">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                            <div class="wizard-nav-btns">
+                                <button class="btn btn-secondary" onclick="prevWizardStep()">[⬅️ Anterior]</button>
+                            </div>
+                        </div>
+
+                        <!-- PASO 3: Elegir Horario / Slot Libre -->
+                        <div class="wizard-step-panel hidden" id="wizard-step-3">
+                            <h3>Selecciona tu Doctor y Horario Conveniente:</h3>
+                            <div class="options-grid" id="slots-options-grid">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                            <div class="wizard-nav-btns">
+                                <button class="btn btn-secondary" onclick="prevWizardStep()">[⬅️ Anterior]</button>
+                                <button class="btn btn-accent" id="btn-register-waitlist" onclick="registerWaitlistSubmit()">[⏳ Registrarme en Lista de Espera de esta Sede]</button>
+                            </div>
+                        </div>
+
+                        <!-- PASO 4: Confirmación Final -->
+                        <div class="wizard-step-panel hidden" id="wizard-step-4">
+                            <div class="success-message">
+                                <span class="success-icon">🎉</span>
+                                <h3>¡Reserva Procesada Atómicamente con Éxito!</h3>
+                                <p id="wizard-confirm-text"></p>
+                                <button class="btn btn-primary" onclick="restartWizard()">[📅 Reservar Otra Cita]</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Información del Paciente (Citas, Autorizaciones y Lista de Espera) -->
+                    <div class="info-sidebar">
+                        <div class="info-card">
+                            <h3>Mis Citas Médicas Activas</h3>
+                            <div class="list-container" id="patient-active-appointments">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <h3>Mis Autorizaciones Médicas</h3>
+                            <p class="sidebar-help">Permiten agendar citas múltiples recurrentes sin la restricción de doble reserva activa.</p>
+                            <div class="list-container" id="patient-medical-authorizations">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <h3>Mis Solicitudes en Lista de Espera (LEA)</h3>
+                            <div class="list-container" id="patient-waitlist-requests">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================================================================== -->
+            <!-- VISTA C: DASHBOARD DE LA RECEPCIONISTA -->
+            <!-- ==================================================================== -->
+            <section id="recep-view" class="view-panel hidden">
+                <div class="recep-grid">
+                    <!-- Columna Izquierda: Check-in Diario y Búsqueda global -->
+                    <div class="recep-main">
+                        <div class="search-card">
+                            <h2>Buscador Clínico Inteligente</h2>
+                            <div class="search-box">
+                                <input type="text" id="recep-search-input" placeholder="Buscar paciente por DNI o Nombre..." oninput="onSearchPatientInput()">
+                                <div id="recep-search-results" class="autocomplete-dropdown hidden"></div>
+                            </div>
+                        </div>
+
+                        <div class="appointments-card">
+                            <h2>Admisión y Check-in de Pacientes (Hoy)</h2>
+                            <table class="table" id="recep-appointments-table">
+                                <thead>
+                                    <tr>
+                                        <th>Hora</th>
+                                        <th>Paciente</th>
+                                        <th>Médico</th>
+                                        <th>Sede</th>
+                                        <th>Estado</th>
+                                        <th>Acciones de Recepción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recep-appointments-tbody">
+                                    <!-- Inyectado dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Columna Derecha: Acciones Administrativas -->
+                    <div class="recep-sidebar">
+                        <div class="admin-action-card">
+                            <h3>Cambio de Sede de Cita</h3>
+                            <p class="sidebar-help">Aplica validación de geografía estricta: debe pertenecer a la ciudad del paciente.</p>
+                            <div class="form-group">
+                                <label for="change-branch-appointment-id">ID de la Cita:</label>
+                                <input type="text" id="change-branch-appointment-id" placeholder="Copia el ID de la cita...">
+                            </div>
+                            <div class="form-group">
+                                <label for="change-branch-destination-id">Sede de Destino:</label>
+                                <select id="change-branch-destination-id">
+                                    <!-- Inyectado dinámicamente -->
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="changeBranchSubmit()">[📍 Cambiar Sede de Cita]</button>
+                        </div>
+
+                        <div class="admin-action-card">
+                            <h3>Cancelación Masiva de Agenda</h3>
+                            <p class="sidebar-help">Cancela citas futuras por contingencia e inserta reprogramación en lote cronológica.</p>
+                            <div class="form-group">
+                                <label for="massive-cancel-branch-id">Sede Física:</label>
+                                <select id="massive-cancel-branch-id">
+                                    <option value="">-- Todas las sedes --</option>
+                                    <!-- Inyectado dinámicamente -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="massive-cancel-doctor-id">Médico Especialista:</label>
+                                <select id="massive-cancel-doctor-id">
+                                    <option value="">-- Todos los médicos --</option>
+                                    <!-- Inyectado dinámicamente -->
+                                </select>
+                            </div>
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="massive-cancel-reschedule" checked>
+                                <label for="massive-cancel-reschedule">Auto-reprogramar cronológicamente (LEA)</label>
+                            </div>
+                            <button class="btn btn-danger btn-block" onclick="massiveCancellationSubmit()">[⚠️ Ejecutar Cancelación Masiva]</button>
+                            <div id="massive-cancel-report" class="alert alert-success hidden"></div>
+                        </div>
+
+                        <div class="admin-action-card">
+                            <h3>Historial de Cancelaciones Masivas</h3>
+                            <div class="list-container" id="massive-cancellations-history-list">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================================================================== -->
+            <!-- VISTA D: SALA DE ESPERA VIRTUAL DEL MÉDICO -->
+            <!-- ==================================================================== -->
+            <section id="medico-view" class="view-panel hidden">
+                <div class="medico-grid">
+                    <!-- Sala de Espera Activa -->
+                    <div class="medico-main">
+                        <div class="waiting-room-card">
+                            <h2>Mi Sala de Espera Virtual (Admisiones de Hoy)</h2>
+                            <p class="subtitle">Lista de pacientes admitidos en esta sede en orden de hora de cita.</p>
+                            <div class="waiting-patients-list" id="medico-waiting-patients-list">
+                                <!-- Inyectado dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Consola de Notas Clínicas y Evolución -->
+                    <div class="medico-sidebar">
+                        <div class="evolution-card">
+                            <h3>Consola de Evolución Clínica</h3>
+                            <p class="sidebar-help">Completa la consulta de forma atómica y guarda la nota clínica de forma confidencial.</p>
+                            
+                            <div class="form-group">
+                                <label for="evolution-patient-name">Paciente Seleccionado:</label>
+                                <input type="text" id="evolution-patient-name" readonly value="Ninguno seleccionado">
+                                <input type="hidden" id="evolution-appointment-id">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="evolution-clinical-notes">Nota de Evolución / Diagnóstico:</label>
+                                <textarea id="evolution-clinical-notes" rows="10" placeholder="Escribe aquí el resumen clínico del paciente..."></textarea>
+                            </div>
+
+                            <button class="btn btn-primary btn-block" id="btn-complete-evolution" onclick="completeEvolutionSubmit()" disabled>[💾 Registrar y Finalizar Consulta]</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================================================================== -->
+            <!-- VISTA E: PANEL DEL ADMINISTRADOR -->
+            <!-- ==================================================================== -->
+            <section id="admin-view" class="view-panel hidden">
+                <div class="admin-grid">
+                    <!-- Formulario de Creación Unificada -->
+                    <div class="admin-card">
+                        <h2>Creación Unificada de Cuentas de Personal</h2>
+                        <p class="subtitle">Crea cuentas de usuarios de forma atómica. Si es Médico, el formulario se expande reactivamente.</p>
+                        
+                        <div class="form-group">
+                            <label for="admin-user-username">Nombre de Usuario (o DNI para Paciente):</label>
+                            <input type="text" id="admin-user-username" placeholder="Ej: recep_medellin o DNI">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="admin-user-email">Correo Electrónico:</label>
+                            <input type="email" id="admin-user-email" placeholder="email@clinicasalud.com">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="admin-user-password">Contraseña Temporal:</label>
+                            <input type="password" id="admin-user-password" placeholder="Contraseña de inicio">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="admin-user-rol">Rol del Usuario:</label>
+                            <select id="admin-user-rol" onchange="onAdminUserRolChange()">
+                                <option value="Recepcionista">Recepcionista</option>
+                                <option value="Medico">Médico Especialista</option>
+                                <option value="Admin">Administrador</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="admin-user-branch">Sede de Trabajo Asignada:</label>
+                            <select id="admin-user-branch">
+                                <!-- Inyectado dinámicamente -->
+                            </select>
+                        </div>
+
+                        <!-- Sección Expandible Reactiva para Médico -->
+                        <div id="admin-doctor-fields" class="hidden-fields hidden">
+                            <div class="form-group">
+                                <label for="admin-doc-licencia">Número de Licencia Profesional:</label>
+                                <input type="text" id="admin-doc-licencia" placeholder="Ej: LIC-984029">
+                            </div>
+                            <div class="form-group">
+                                <label for="admin-doc-nombre">Nombre Completo del Médico:</label>
+                                <input type="text" id="admin-doc-nombre" placeholder="Ej: Dr. Fernando Restrepo">
+                            </div>
+                            <div class="form-group">
+                                <label for="admin-doc-specialty">Especialidad Médica:</label>
+                                <select id="admin-doc-specialty">
+                                    <!-- Inyectado dinámicamente -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="admin-doc-duration">Duración por Defecto de Cita:</label>
+                                <select id="admin-doc-duration">
+                                    <option value="20 minutes">20 Minutos</option>
+                                    <option value="30 minutes" selected>30 Minutos</option>
+                                    <option value="45 minutes">45 Minutos</option>
+                                    <option value="60 minutes">60 Minutos</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary btn-block" onclick="createUserSubmit()">[➕ Crear y Registrar Cuenta]</button>
+                    </div>
+
+                    <!-- Asignador de Delegación de Permisos Temporales -->
+                    <div class="admin-sidebar">
+                        <div class="admin-action-card">
+                            <h3>Delegación de Permisos Temporales</h3>
+                            <p class="sidebar-help">Otorga permisos de contingencia a una Recepcionista con expiración automática real en base de datos.</p>
+                            
+                            <div class="form-group">
+                                <label for="deleg-user-id">Recepcionista Receptora:</label>
+                                <select id="deleg-user-id">
+                                    <!-- Inyectado dinámicamente -->
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="deleg-permission-name">Permiso a Delegar:</label>
+                                <select id="deleg-permission-name">
+                                    <option value="can_execute_massive_cancellations">can_execute_massive_cancellations</option>
+                                    <option value="can_configure_system_parameters">can_configure_system_parameters</option>
+                                    <option value="can_modify_appointment_duration">can_modify_appointment_duration</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="deleg-start-date">Fecha de Inicio:</label>
+                                <input type="datetime-local" id="deleg-start-date">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="deleg-end-date">Fecha de Expiración (Opcional):</label>
+                                <input type="datetime-local" id="deleg-end-date">
+                            </div>
+
+                            <button class="btn btn-accent btn-block" onclick="delegatePermissionSubmit()">[🔑 Registrar Delegación Temporal]</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <!-- Notificación Toast global para avisos accesibles -->
+        <div id="toast-notification" class="toast hidden"></div>
+    </div>
+
+    <!-- Cargar lógica frontend JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
