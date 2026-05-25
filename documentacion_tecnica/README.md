@@ -6,22 +6,54 @@ Este diseño y especificación técnica han sido elaborados y refinados siguiend
 
 ---
 
+## 🌐 Diagrama de Contexto del Sistema (C4 Nivel 1)
+
+El siguiente modelo de contexto representa los límites del sistema SGCM, los actores o roles involucrados que interactúan con el backend de citas, y los sistemas o almacenes de datos externos vinculados:
+
+```mermaid
+graph TD
+    classDef actor fill:#E6F0FA,stroke:#0B0F19,stroke-width:2px;
+    classDef system fill:#0B0F19,stroke:#0B0F19,stroke-width:2px,color:#FFF;
+    classDef external fill:#F3E6FA,stroke:#5A189A,stroke-width:2px;
+
+    P[Paciente]:::actor
+    R[Recepcionista]:::actor
+    M[Médico]:::actor
+    A[Administrador]:::actor
+
+    SGCM[Sistema de Gestión de Citas Médicas \n -SGCM-]:::system
+
+    NS[Servicio de Notificación SMS \n -Simulado-]:::external
+    BS[Simulador de Blob Storage \n -storage/reports/-]:::external
+    DB[(Base de Datos \n PostgreSQL -sgcm_db-)]:::system
+
+    P -->|Reserva, Cancela, Entra en Espera| SGCM
+    R -->|Check-in, Admisiones, Reservas| SGCM
+    M -->|Sala de Espera, Inicia/Finaliza Consulta| SGCM
+    A -->|Parametriza, Asigna Delegaciones| SGCM
+
+    SGCM -->|Lee/Escribe Datos| DB
+    SGCM -->|Envía Notificación SMS| NS
+    SGCM -->|Exporta Evidencia CSV| BS
+```
+
+---
+
 ## 🗺️ Índice de Contenidos Modulares
 
 Para evitar la saturación del contexto y permitir un trabajo a profundidad en cada área, la documentación ha sido dividida en los siguientes capítulos independientes:
 
 ### 🗄️ [Capítulo 1: Diseño de Base de Datos (PostgreSQL Nativo)](01-Database-Design.md)
 *   Esquema lógico-relacional normalizado.
-*   Uso de tipos avanzados (`tstzrange` y la extensión `btree_gist`).
+*   Uso de tipos avanzados (`tstzrange` y `daterange` con la extensión `btree_gist`).
 *   Restricción de exclusión física para evitar solapamientos a nivel de motor.
 *   Configuración de `autovacuum` e índices GIST de intervalos temporales para optimizar la performance.
 
 ### 🧠 [Capítulo 2: Lógica de Negocio y Motor de Lista de Espera](02-Business-Logic.md)
-*   Algoritmo detallado de asignación automática de citas (FIFO priorizado).
-*   Mitigación de Race Conditions mediante bloqueos pesimistas (`FOR UPDATE SKIP LOCKED`).
-*   Regla crítica de las **2 Horas** para slots liberados en el mismo día.
-*   Regla de **Días Siguientes** con un lookahead límite de 7 días configurables.
-*   Módulo de modificación y cancelación de citas médicas.
+*   Algoritmo detallado de asignación automática de citas (FIFO priorizado) y coincidencia exacta.
+*   Mitigación de Race Conditions mediante bloqueo seguro (`FOR UPDATE OF a SKIP LOCKED`).
+*   Diagramas de flujos de datos (DFD), diagramas de estado de la cita y diagramas de secuencia transaccional.
+*   Reglas clínicas avanzadas: amortiguación dinámica, geografía estricta, inasistencia, doble reserva y traslado inter-sede.
 
 ### ☁️ [Capítulo 3: Mapeo de Infraestructura Cloud y Análisis de Costos](03-Infrastructure.md)
 *   Mapeo de componentes en las 3 nubes líderes: **AWS vs. GCP vs. Azure**.
@@ -32,12 +64,12 @@ Para evitar la saturación del contexto y permitir un trabajo a profundidad en c
 ### ♿ [Capítulo 4: Accesibilidad, Roles y Seguridad de Datos (WCAG 2.1 AA)](04-Security-Compliance.md)
 *   Lineamientos de inclusión y UX para personas de avanzada edad.
 *   Estrategia de **Linear Wizard Pattern** para flujos secuenciales y botones gigantes (48x48dp).
-*   Control de Acceso Basado en Roles (RBAC): perfiles de Paciente, Médico, Recepcionista y Admin.
+*   Control de Acceso Basado en Roles (RBAC): perfiles de Paciente, Médico, Recepcionista y Admin con delegación temporal dinámica.
 *   Privacidad de datos médicos (Habeas Data / HIPAA) y enmascaramiento en logs.
 
 ### 🧪 [Capítulo 5: Estrategia de Aseguramiento de Calidad (QA & Testing)](05-Testing-QA.md)
-*   Pirámide de pruebas automatizadas en Pytest.
-*   Estrategia de testing de concurrencia y pruebas de integración para race conditions.
+*   Pirámide de pruebas automatizadas en Pytest interactuando con PostgreSQL real de pruebas.
+*   Estrategia de testing de concurrencia y pruebas de integración para race conditions y reglas clínicas.
 *   Herramientas de auditoría automatizada de accesibilidad (`axe-core`).
 
 ### 📦 [Capítulo 6: Gobierno de Código, Git Workflow y Operaciones](06-Operations.md)
@@ -60,4 +92,5 @@ Para evitar la saturación del contexto y permitir un trabajo a profundidad en c
 ---
 **Documento Central de Arquitectura**  
 *Estado:* **APROBADO PARA DESARROLLO** (SGCM-001)  
-*Versión:* `1.0.0`
+*Versión:* `1.1.0`  
+*Última Actualización:* Conforme a la Fase 3 y 4 de lógica clínica y relacional.
