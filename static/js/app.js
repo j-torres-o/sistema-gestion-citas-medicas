@@ -424,6 +424,7 @@ async function loadPatientDashboard() {
         
         renderSpecialtiesGrid();
         renderBranchesGrid();
+        initPatientProfileUI(); // Inicializar UI de perfil de residencia
         
         // Cargar listas del Paciente en el Sidebar
         await refreshPatientSidebarLists();
@@ -1021,6 +1022,106 @@ function announceWizardStep() {
         speakText('Paso dos. Selecciona la sede clínica de tu preferencia.');
     } else if (state.wizard.step === 3) {
         speakText('Paso tres. Elige el horario conveniente con el doctor de tu preferencia.');
+    }
+}
+
+// Funciones de Configuración de Perfil y Residencia del Paciente
+function initPatientProfileUI() {
+    const citySelect = document.getElementById('profile-city');
+    if (!citySelect) return;
+    
+    // Obtener ciudades únicas
+    const cities = [...new Set(state.branches.map(b => b.ciudad))];
+    
+    citySelect.innerHTML = '';
+    cities.forEach(city => {
+        const opt = document.createElement('option');
+        opt.value = city;
+        opt.innerText = city;
+        citySelect.appendChild(opt);
+    });
+    
+    // Seleccionar ciudad de residencia del paciente actual
+    if (state.session && state.session.ciudad_origen) {
+        citySelect.value = state.session.ciudad_origen;
+    }
+    
+    onProfileCityChange();
+}
+
+function onProfileCityChange() {
+    const citySelect = document.getElementById('profile-city');
+    const branchSelect = document.getElementById('profile-branch');
+    if (!citySelect || !branchSelect) return;
+    
+    const selectedCity = citySelect.value;
+    
+    // Filtrar sedes por esa ciudad
+    const branchesInCity = state.branches.filter(b => b.ciudad === selectedCity);
+    
+    branchSelect.innerHTML = '';
+    branchesInCity.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.id_sede;
+        opt.innerText = b.nombre;
+        branchSelect.appendChild(opt);
+    });
+    
+    // Seleccionar la sede actual del paciente si corresponde a esta ciudad
+    if (state.session && state.session.id_sede) {
+        const hasBranch = branchesInCity.some(b => String(b.id_sede) === String(state.session.id_sede));
+        if (hasBranch) {
+            branchSelect.value = state.session.id_sede;
+        }
+    }
+}
+
+async function updatePatientProfileSubmit() {
+    const citySelect = document.getElementById('profile-city');
+    const branchSelect = document.getElementById('profile-branch');
+    if (!citySelect || !branchSelect) return;
+    
+    const selectedCity = citySelect.value;
+    const selectedBranch = branchSelect.value;
+    
+    if (!selectedCity || !selectedBranch) {
+        showToast('Por favor, selecciona tu ciudad y sede preferida.', 'error');
+        return;
+    }
+    
+    const pId = state.session.id_perfil_clinico;
+    
+    try {
+        const response = await fetch('/api/patient/update-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id_paciente: pId,
+                ciudad_origen: selectedCity,
+                id_sede: selectedBranch
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            showToast(data.error || 'Error al actualizar tu residencia.', 'error');
+            speakText(`No se pudo actualizar tu perfil: ${data.error || ''}`);
+            return;
+        }
+        
+        // Actualizar sesión en memoria
+        state.session.ciudad_origen = selectedCity;
+        state.session.id_sede = selectedBranch;
+        
+        speakText('Tu lugar de residencia y sede preferida han sido actualizados con éxito.');
+        showToast('Perfil de residencia actualizado con éxito.', 'success');
+        
+        // Re-renderizar la grilla de sedes del Wizard dinámicamente para aplicar los distintivos de residencia
+        renderBranchesGrid();
+        
+    } catch (e) {
+        showToast('Error de comunicación con el servidor al guardar el perfil.', 'error');
     }
 }
 

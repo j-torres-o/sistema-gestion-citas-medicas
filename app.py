@@ -1089,6 +1089,62 @@ def get_massive_cancellations_history():
         Database.release_connection(conn)
 
 
+@app.route("/api/patient/update-profile", methods=["POST"])
+def update_patient_profile():
+    """
+    Actualiza la ciudad de origen del paciente en 'patients' y su sede favorita en 'users' de forma atómica.
+    """
+    data = request.get_json() or {}
+    id_paciente = data.get("id_paciente")
+    ciudad_origen = data.get("ciudad_origen")
+    id_sede = data.get("id_sede")
+
+    if not id_paciente or not ciudad_origen:
+        return jsonify({"error": "Parámetros obligatorios incompletos (id_paciente, ciudad_origen)."}), 400
+
+    conn = Database.get_connection()
+    conn.autocommit = False
+    cursor = None
+    try:
+        cursor = conn.cursor()
+
+        # 1. Obtener id_usuario asociado al paciente
+        cursor.execute("SELECT id_usuario FROM patients WHERE id_paciente = %s;", (id_paciente,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "El paciente especificado no existe."}), 404
+        id_usuario = row[0]
+
+        # 2. Actualizar la ciudad de origen en la tabla patients
+        cursor.execute(
+            "UPDATE patients SET ciudad_origen = %s WHERE id_paciente = %s;",
+            (ciudad_origen, id_paciente)
+        )
+
+        # 3. Actualizar la sede favorita en la tabla users
+        if id_sede:
+            cursor.execute(
+                "UPDATE users SET id_sede = %s WHERE id_usuario = %s;",
+                (id_sede, id_usuario)
+            )
+        else:
+            cursor.execute(
+                "UPDATE users SET id_sede = NULL WHERE id_usuario = %s;",
+                (id_usuario,)
+            )
+
+        conn.commit()
+        return jsonify({"success": True, "message": "Residencia y sede preferida actualizadas con éxito."})
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        Database.release_connection(conn)
+
+
 # ============================================================================
 # RUN SERVER
 # ============================================================================

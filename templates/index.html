@@ -200,6 +200,27 @@
                                 <!-- Inyectado dinámicamente -->
                             </div>
                         </div>
+
+                         <div class="info-card" id="patient-profile-card">
+                             <h3>Mi Perfil y Residencia</h3>
+                             <p class="sidebar-help">Actualiza tu lugar de residencia y tu sede preferida en caso de mudanza para priorizar tus búsquedas.</p>
+                             
+                             <div class="form-group" style="margin-bottom:12px;">
+                                 <label for="profile-city" style="font-size:12px; font-weight:700;">Ciudad de Residencia:</label>
+                                 <select id="profile-city" onchange="onProfileCityChange()" style="min-height:36px; height:36px; padding:4px 8px; font-size:12px; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-main); color:var(--text-main);">
+                                     <!-- Inyectado dinámicamente -->
+                                 </select>
+                             </div>
+                             
+                             <div class="form-group" style="margin-bottom:16px;">
+                                 <label for="profile-branch" style="font-size:12px; font-weight:700;">Sede Preferida:</label>
+                                 <select id="profile-branch" style="min-height:36px; height:36px; padding:4px 8px; font-size:12px; width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-main); color:var(--text-main);">
+                                     <!-- Inyectado dinámicamente -->
+                                 </select>
+                             </div>
+                             
+                             <button class="btn btn-primary btn-block" onclick="updatePatientProfileSubmit()" style="min-height:36px; height:36px; font-size:12px; padding:4px 8px;">💾 Guardar Residencia</button>
+                         </div>
                     </div>
                 </div>
             </section>
