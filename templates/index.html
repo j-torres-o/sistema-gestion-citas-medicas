@@ -33,7 +33,7 @@
                 <!-- Perfil de Sesión del Usuario -->
                 <div class="session-card" id="session-card">
                     <span id="session-username">Sin iniciar sesión</span>
-                    <button class="btn btn-logout hidden" id="btn-logout" onclick="logout()">[🚪 Salir]</button>
+                    <button class="btn btn-logout hidden" id="btn-logout" onclick="logout()">🚪 Salir</button>
                 </div>
             </div>
         </header>
@@ -68,7 +68,7 @@
                         </ul>
                     </div>
 
-                    <button class="btn btn-primary btn-block" id="btn-login-submit" onclick="loginSubmit()">[🔑 Iniciar Sesión]</button>
+                    <button class="btn btn-primary btn-block" id="btn-login-submit" onclick="loginSubmit()">🔑 Iniciar Sesión</button>
                     <div id="login-error" class="alert alert-danger hidden"></div>
                 </div>
             </section>
@@ -83,8 +83,8 @@
                         <div class="wizard-header">
                             <h2>Reservar Nueva Cita Médica</h2>
                             <div class="speech-controls">
-                                <button class="btn btn-speech" id="btn-speech-assist" onclick="toggleSpeechAssist()">[🔊 Activar Asistencia por Voz]</button>
-                                <button class="btn btn-mic hidden" id="btn-mic-record" onclick="toggleMicRecord()">[🎙️ Dictar DNI/Siguiente]</button>
+                                <button class="btn btn-speech" id="btn-speech-assist" onclick="toggleSpeechAssist()">🔊 Activar Asistencia por Voz</button>
+                                <button class="btn btn-mic hidden" id="btn-mic-record" onclick="toggleMicRecord()">🎙️ Dictar DNI/Siguiente</button>
                             </div>
                         </div>
 
@@ -110,8 +110,8 @@
                             <div class="options-grid" id="branches-options-grid">
                                 <!-- Inyectado dinámicamente -->
                             </div>
-                            <div class="wizard-nav-btns">
-                                <button class="btn btn-secondary" onclick="prevWizardStep()">[⬅️ Anterior]</button>
+                             <div class="wizard-nav-btns">
+                                <button class="btn btn-secondary" onclick="prevWizardStep()">⬅️ Anterior</button>
                             </div>
                         </div>
 
@@ -122,21 +122,27 @@
                                 <!-- Inyectado dinámicamente -->
                             </div>
                             
-                            <!-- Tarjeta Reactiva de Registro en Lista de Espera (LEA) -->
+                            <!-- Tarjeta Reactiva de Registro en Lista de Espera -->
                             <div id="waitlist-registration-card" class="hidden" style="margin-top: 24px; padding: 24px; border: 2px dashed var(--border); border-radius: var(--radius-md); background-color: var(--bg-main);">
-                                <h4 style="font-family:'Outfit',sans-serif; font-size:18px; margin-bottom:8px;">⏳ Registrarse en Lista de Espera (LEA)</h4>
-                                <p class="subtitle" style="font-size: 14px; margin-bottom: 20px;">No hay turnos libres actualmente. Inscríbete en la cola para asignación automática por liberación.</p>
+                                <h4 style="font-family:'Outfit',sans-serif; font-size:18px; margin-bottom:8px;">⏳ Inscribirse en la Lista de Espera</h4>
+                                <p class="subtitle" style="font-size: 14px; margin-bottom: 20px;">No tenemos horarios disponibles en este momento. Registra tu solicitud en la lista de espera para asignarte un turno automáticamente en cuanto se libere un espacio.</p>
                                 
                                 <div class="form-group" style="margin-bottom:16px;">
-                                    <label style="font-weight:700;">Preferencia de Asignación:</label>
-                                    <div style="display: flex; gap: 24px; margin-top: 8px; flex-wrap: wrap;">
-                                        <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
-                                            <input type="radio" name="waitlist-type" value="FechaCercana" checked onchange="toggleWaitlistRangeFields()" style="width: 20px; height: 20px;">
-                                            Fecha más cercana (FIFO General)
+                                    <label style="font-weight:700;">¿Cómo prefieres que busquemos tu cita?</label>
+                                    <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+                                        <label style="display: flex; align-items: flex-start; gap: 10px; font-weight: normal; cursor: pointer;">
+                                            <input type="radio" name="waitlist-type" value="FechaCercana" checked onchange="toggleWaitlistRangeFields()" style="width: 20px; height: 20px; margin-top: 2px;">
+                                            <div>
+                                                <strong>Fecha más cercana</strong>
+                                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Te asignaremos el primer espacio disponible que se libere en la agenda médica.</div>
+                                            </div>
                                         </label>
-                                        <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
-                                            <input type="radio" name="waitlist-type" value="RangoEspecifico" onchange="toggleWaitlistRangeFields()" style="width: 20px; height: 20px;">
-                                            Rango de fechas específico
+                                        <label style="display: flex; align-items: flex-start; gap: 10px; font-weight: normal; cursor: pointer;">
+                                            <input type="radio" name="waitlist-type" value="RangoEspecifico" onchange="toggleWaitlistRangeFields()" style="width: 20px; height: 20px; margin-top: 2px;">
+                                            <div>
+                                                <strong>En un rango de fechas de tu preferencia</strong>
+                                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Buscaremos espacios libres que se acomoden exactamente a las fechas en las que tienes disponibilidad para asistir.</div>
+                                            </div>
                                         </label>
                                     </div>
                                 </div>
@@ -152,11 +158,11 @@
                                     </div>
                                 </div>
                                 
-                                <button class="btn btn-accent btn-block" onclick="registerWaitlistSubmit()">[⏳ Confirmar Registro en Lista de Espera]</button>
+                                <button class="btn btn-accent btn-block" onclick="registerWaitlistSubmit()">⏳ Confirmar Registro en Lista de Espera</button>
                             </div>
 
                             <div class="wizard-nav-btns" style="margin-top:20px;">
-                                <button class="btn btn-secondary" onclick="prevWizardStep()">[⬅️ Anterior]</button>
+                                <button class="btn btn-secondary" onclick="prevWizardStep()">⬅️ Anterior</button>
                             </div>
                         </div>
 
@@ -164,9 +170,9 @@
                         <div class="wizard-step-panel hidden" id="wizard-step-4">
                             <div class="success-message">
                                 <span class="success-icon">🎉</span>
-                                <h3>¡Reserva Procesada Atómicamente con Éxito!</h3>
+                                <h3>¡Tu cita ha sido confirmada con éxito!</h3>
                                 <p id="wizard-confirm-text"></p>
-                                <button class="btn btn-primary" onclick="restartWizard()">[📅 Reservar Otra Cita]</button>
+                                <button class="btn btn-primary" onclick="restartWizard()">📅 Reservar Otra Cita</button>
                             </div>
                         </div>
                     </div>
@@ -248,7 +254,7 @@
                                     <!-- Inyectado dinámicamente -->
                                 </select>
                             </div>
-                            <button class="btn btn-primary btn-block" onclick="changeBranchSubmit()">[📍 Cambiar Sede de Cita]</button>
+                             <button class="btn btn-primary btn-block" onclick="changeBranchSubmit()">📍 Cambiar Sede de Cita</button>
                         </div>
 
                         <div class="admin-action-card">
@@ -270,9 +276,9 @@
                             </div>
                             <div class="checkbox-group">
                                 <input type="checkbox" id="massive-cancel-reschedule" checked>
-                                <label for="massive-cancel-reschedule">Auto-reprogramar cronológicamente (LEA)</label>
+                                <label for="massive-cancel-reschedule">Auto-reprogramar cronológicamente</label>
                             </div>
-                            <button class="btn btn-danger btn-block" onclick="massiveCancellationSubmit()">[⚠️ Ejecutar Cancelación Masiva]</button>
+                             <button class="btn btn-danger btn-block" onclick="massiveCancellationSubmit()">⚠️ Ejecutar Cancelación Masiva</button>
                             <div id="massive-cancel-report" class="alert alert-success hidden"></div>
                         </div>
 
@@ -319,7 +325,7 @@
                                 <textarea id="evolution-clinical-notes" rows="10" placeholder="Escribe aquí el resumen clínico del paciente..."></textarea>
                             </div>
 
-                            <button class="btn btn-primary btn-block" id="btn-complete-evolution" onclick="completeEvolutionSubmit()" disabled>[💾 Registrar y Finalizar Consulta]</button>
+                             <button class="btn btn-primary btn-block" id="btn-complete-evolution" onclick="completeEvolutionSubmit()" disabled>💾 Registrar y Finalizar Consulta</button>
                         </div>
                     </div>
                 </div>
@@ -393,7 +399,7 @@
                             </div>
                         </div>
 
-                        <button class="btn btn-primary btn-block" onclick="createUserSubmit()">[➕ Crear y Registrar Cuenta]</button>
+                        <button class="btn btn-primary btn-block" onclick="createUserSubmit()">➕ Crear y Registrar Cuenta</button>
                     </div>
 
                     <!-- Asignador de Delegación de Permisos Temporales -->
@@ -428,7 +434,7 @@
                                 <input type="datetime-local" id="deleg-end-date">
                             </div>
 
-                            <button class="btn btn-accent btn-block" onclick="delegatePermissionSubmit()">[🔑 Registrar Delegación Temporal]</button>
+                            <button class="btn btn-accent btn-block" onclick="delegatePermissionSubmit()">🔑 Registrar Delegación Temporal</button>
                         </div>
                     </div>
                 </div>

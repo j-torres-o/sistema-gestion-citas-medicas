@@ -210,13 +210,13 @@ function initSpeechRecognition() {
     
     recognition.onstart = () => {
         state.speech.recognitionActive = true;
-        document.getElementById('btn-mic-record').innerText = '[🔴 Escuchando...]';
+        document.getElementById('btn-mic-record').innerText = '🔴 Escuchando...';
         document.getElementById('btn-mic-record').style.backgroundColor = '#EF4444';
     };
     
     recognition.onend = () => {
         state.speech.recognitionActive = false;
-        document.getElementById('btn-mic-record').innerText = '[🎙️ Dictar DNI/Siguiente]';
+        document.getElementById('btn-mic-record').innerText = '🎙️ Dictar DNI/Siguiente';
         document.getElementById('btn-mic-record').style.backgroundColor = '';
     };
     
@@ -229,7 +229,9 @@ function initSpeechRecognition() {
     
     recognition.onerror = (event) => {
         console.error('[SPEECH REC] Error:', event.error);
-        if (event.error !== 'no-speech') {
+        if (event.error === 'not-allowed') {
+            showToast('Acceso al micrófono denegado. Por favor, permite el acceso al micrófono en la barra de direcciones de tu navegador para usar el dictado.', 'warning');
+        } else if (event.error !== 'no-speech') {
             showToast(`Error de micrófono: ${event.error}`, 'error');
         }
     };
@@ -243,13 +245,13 @@ function toggleSpeechAssist() {
     const btnMic = document.getElementById('btn-mic-record');
     
     if (state.speech.synthesisActive) {
-        btn.innerText = '[🔇 Desactivar Asistencia por Voz]';
+        btn.innerText = '🔇 Desactivar Asistencia por Voz';
         btn.classList.add('btn-primary');
         btnMic.classList.remove('hidden');
         speakText('Asistencia por voz activada. Te guiaré paso a paso.');
         announceWizardStep();
     } else {
-        btn.innerText = '[🔊 Activar Asistencia por Voz]';
+        btn.innerText = '🔊 Activar Asistencia por Voz';
         btn.classList.remove('btn-primary');
         btnMic.classList.add('hidden');
         if (state.speech.recognitionActive) {
@@ -609,6 +611,14 @@ function renderPatientActiveAppointments(list) {
         return;
     }
     
+    // Contar citas por especialidad para identificar recurrencias clínicas
+    const specialtyCounts = {};
+    list.forEach(apt => {
+        if (apt.estado === 'Agendada' || apt.estado === 'Confirmada') {
+            specialtyCounts[apt.especialidad_nombre] = (specialtyCounts[apt.especialidad_nombre] || 0) + 1;
+        }
+    });
+    
     list.forEach(apt => {
         const item = document.createElement('div');
         item.className = 'list-item';
@@ -616,10 +626,20 @@ function renderPatientActiveAppointments(list) {
         let cancelBtn = '';
         // Solo permitir cancelar si es futura
         if (apt.estado === 'Agendada' || apt.estado === 'Confirmada') {
-            cancelBtn = `<button class="btn btn-logout" style="margin-top: 8px; min-height:36px; height:36px; padding:2px 8px;" onclick="cancelAppointmentFromPatient('${apt.id_cita}')">[❌ Cancelar]</button>`;
+            cancelBtn = `<button class="btn btn-logout" style="margin-top: 8px; min-height:36px; height:36px; padding:2px 8px;" onclick="cancelAppointmentFromPatient('${apt.id_cita}')">❌ Cancelar</button>`;
+        }
+        
+        // Identificar visualmente citas recurrentes consecutivas de la misma especialidad
+        let recurrenciaBadge = '';
+        if (specialtyCounts[apt.especialidad_nombre] > 1 && (apt.estado === 'Agendada' || apt.estado === 'Confirmada')) {
+            item.style.borderLeft = '4px solid var(--accent)';
+            item.style.paddingLeft = '12px';
+            item.style.backgroundColor = 'var(--bg-main-light, rgba(239, 68, 68, 0.05))';
+            recurrenciaBadge = `<div style="display:inline-block; margin-bottom: 6px; background-color: var(--accent); color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight:700;">🔄 Cita de Tratamiento Recurrente</div>`;
         }
         
         item.innerHTML = `
+            ${recurrenciaBadge}
             <div class="list-item-title">🩺 ${apt.especialidad_nombre} - ${apt.doctor_nombre}</div>
             <div class="list-item-meta">
                 🏢 Sede: ${apt.sede_nombre}<br>
@@ -736,11 +756,11 @@ async function selectSlot(id_cita) {
         updateWizardUI();
         
         const slot = state.wizard.availableSlots.find(s => s.id_cita === id_cita);
-        const confirmText = `Tu cita ha sido reservada de forma consistente con el Dr. ${slot.doctor_nombre} en la sede ${slot.sede_nombre} para el día ${slot.fecha} a las ${slot.hora_inicio} horas.`;
+        const confirmText = `Tu cita ha sido agendada con el Dr. ${slot.doctor_nombre} en la sede ${slot.sede_nombre} para el día ${slot.fecha} a las ${slot.hora_inicio} horas.`;
         document.getElementById('wizard-confirm-text').innerText = confirmText;
         
         speakText('¡Excelente! Tu reserva ha sido confirmada con éxito.');
-        showToast('Cita reservada con éxito de forma consistente.', 'success');
+        showToast('Cita agendada con éxito.', 'success');
         
         // Actualizar listas del sidebar
         await refreshPatientSidebarLists();
@@ -857,14 +877,8 @@ async function registerWaitlistSubmit() {
         
         const data = await response.json();
         
-        if (!response.ok) {
-            showToast(data.error || 'Error al unirse a la lista de espera.', 'error');
-            speakText(`No se pudo procesar: ${data.error || ''}`);
-            return;
-        }
-        
-        speakText('Has sido agregado a la lista de espera del motor LEA de forma consistente.');
-        showToast('Agregado con éxito a la lista de espera.', 'success');
+        speakText('Te hemos registrado con éxito en nuestra lista de espera. Te avisaremos en cuanto tengamos un espacio disponible para ti.');
+        showToast('Registro en lista de espera exitoso.', 'success');
         
         // Avanzar a confirmación alternativa
         state.wizard.step = 4;
@@ -873,13 +887,13 @@ async function registerWaitlistSubmit() {
         const specName = state.specialties.find(s => s.id_especialidad === state.wizard.selectedSpecialty).nombre;
         const branchName = state.branches.find(b => b.id_sede === state.wizard.selectedBranch).nombre;
         
-        let confirmText = `Se registró con éxito tu solicitud en la <strong>Lista de Espera Automática (LEA)</strong> para la especialidad <strong>${specName}</strong> en la sede <strong>${branchName}</strong>.<br>`;
+        let confirmText = `Hemos registrado tu solicitud en nuestra <strong>lista de espera</strong> para la especialidad <strong>${specName}</strong> en la sede <strong>${branchName}</strong>.<br>`;
         if (waitlistType === 'RangoEspecifico') {
-            confirmText += `Buscando citas disponibles entre el <strong>${formatDateString(rango_inicio)}</strong> y el <strong>${formatDateString(rango_fin)}</strong>. `;
+            confirmText += `Buscaremos citas disponibles que se acomoden a tus fechas entre el <strong>${formatDateString(rango_inicio)}</strong> y el <strong>${formatDateString(rango_fin)}</strong>. `;
         } else {
-            confirmText += `Asignación automática por orden de llegada (Fecha más cercana). `;
+            confirmText += `Buscaremos la fecha más cercana disponible en cuanto se libere un turno. `;
         }
-        confirmText += `Recibirás una notificación por mensaje de texto (SMS) en cuanto un turno quede disponible y se te asigne automáticamente.`;
+        confirmText += `Te notificaremos de inmediato por mensaje de texto (SMS) en cuanto tu cita sea agendada automáticamente.`;
         
         document.getElementById('wizard-confirm-text').innerHTML = confirmText;
         
@@ -1090,8 +1104,8 @@ function renderReceptionistAppointmentsTable(list) {
         let actionButtons = '';
         if (apt.estado === 'Agendada') {
             actionButtons = `
-                <button class="btn btn-primary" style="min-height:36px; height:36px; padding:2px 8px; font-size:12px; margin-right:6px;" onclick="admitPatient('${apt.id_cita}')">[✔ Admitir / Llegó]</button>
-                <button class="btn btn-danger" style="min-height:36px; height:36px; padding:2px 8px; font-size:12px;" onclick="cancelAppointmentFromRecep('${apt.id_cita}')">[❌ Liberar]</button>
+                <button class="btn btn-primary" style="min-height:36px; height:36px; padding:2px 8px; font-size:12px; margin-right:6px;" onclick="admitPatient('${apt.id_cita}')">✔ Admitir / Llegó</button>
+                <button class="btn btn-danger" style="min-height:36px; height:36px; padding:2px 8px; font-size:12px;" onclick="cancelAppointmentFromRecep('${apt.id_cita}')">❌ Liberar</button>
             `;
         } else if (apt.estado === 'Confirmada') {
             actionButtons = '<span style="color:var(--success); font-weight:700;">Admitido (En Sala)</span>';
