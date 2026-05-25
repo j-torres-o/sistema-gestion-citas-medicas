@@ -1,163 +1,136 @@
-# 🧠 Capítulo 2: Lógica de Negocio y Motor de Lista de Espera
+# 🧠 Capítulo 2: Lógica de Negocio y Motor de Lista de Espera (LEA)
 
 **ID del Documento:** `DOC-02`  
 **Estado:** `APPROVED`  
 **Garantía de Idempotencia:** Requerido para todas las asignaciones automáticas de slots.  
-**Estrategia contra Race Conditions:** Bloqueo pesimista a nivel de fila (`FOR UPDATE SKIP LOCKED`).
+**Estrategia contra Race Conditions:** Bloqueo pesimista a nivel de fila y bloqueo seguro en joins (`FOR UPDATE OF a SKIP LOCKED`).
 
 ---
 
 ## 1. Algoritmo de Lista de Espera Automática (LEA)
 
-El motor de asignación opera de manera reactiva ante la liberación de disponibilidad médica. Su propósito es capturar de forma ordenada y consistente el primer paciente de la lista de espera elegible para ocupar el espacio vacante.
+El motor de asignación opera de manera reactiva ante la liberación de disponibilidad médica. Su propósito es capturar de forma ordenada y consistente el primer paciente de la lista de espera elegible para ocupar el espacio vacante, aplicando restricciones dinámicas parametrizadas.
 
 ### 1.1. Reglas de Negocio Implementadas:
 1.  **Prioridad FIFO:** Los pacientes en cola son atendidos por estricto orden de solicitud (`created_at ASC`).
-2.  **Regla de las 2 Horas:** Si un espacio se libera para el **día de hoy**, solo se asignará automáticamente si existe una diferencia de **al menos 2 horas** entre la hora actual (`clock_timestamp()`) y el inicio de la cita. Esto previene asignar citas a las que el paciente físicamente no alcanzará a asistir.
-3.  **Regla de los Días Siguientes (Lookahead Limitado):** Si no hay un paciente con un rango de fechas que cubra exactamente el slot liberado, se permite asignar el espacio a un paciente de rango específico (`RangoEspecifico`) si la cita liberada cae en los **días posteriores** a su rango, con un **límite estricto de hasta 7 días posteriores**. Esto evita asignarle citas muy lejanas en el futuro.
-4.  **Asignación Directa:** La cita se asigna de manera directa a la cuenta del paciente. El sistema no requiere confirmación previa de 15 minutos (reduciendo la barrera digital para adultos mayores). La persona simplemente recibe la notificación y tiene la opción de cancelarla libremente desde su portal si no le resulta conveniente.
+2.  **Sede Específica:** Las solicitudes de lista de espera están vinculadas a una sede física específica (`wl.id_sede = a.id_sede`).
+3.  **Regla de Amortiguación Dinámica (Buffer Horas):** Parametrizada dinámicamente mediante `buffer_horas` en la tabla `system_parameters`. Si un espacio se libera para el **día de hoy**, solo se asignará automáticamente si existe una diferencia de **al menos `buffer_horas`** entre la hora actual UTC y el inicio de la cita. Esto previene asignar citas a las que el paciente físicamente no alcanzará a asistir.
+4.  **Regla de los Días Siguientes (Lookahead Limitado):** Si no hay un paciente con un rango de fechas que cubra exactamente el slot liberado, se permite asignar el espacio a un paciente de rango específico (`RangoEspecifico`) si la cita liberada cae en los **días posteriores** a su rango, con un **límite configurable de `lookahead_dias` posteriores** (ej. 7 días).
+5.  **Asignación Directa:** La cita se asigna de manera directa a la cuenta del paciente. El sistema no requiere confirmación previa de 15 minutos (reduciendo la barrera digital para adultos mayores). La persona simplemente recibe la notificación y tiene la opción de cancelarla libremente desde su portal si no le resulta conveniente.
+
+### 1.2. Prioridad de Coincidencia Exacta en Cancelación Masiva:
+*   Si se crea un nuevo slot de disponibilidad con otro médico en la **misma fecha y hora original del paciente afectado por una cancelación masiva**, el motor LEA prioriza de forma absoluta a dicho paciente (coincidencia exacta) antes de evaluar el resto de la cola FIFO general del sistema.
 
 ---
 
-## 2. Implementación de Consulta y Bloqueo Concurrente (SQL)
+## 2. Implementación de Consulta y Bloqueo Concurrente (SQL CTE)
 
-Para mitigar las condiciones de carrera (*Race Conditions*) en las que múltiples workers asíncronos concurrentes intenten tomar el mismo slot libre y asignárselo a distintos pacientes, utilizaremos el comando **`FOR UPDATE SKIP LOCKED`** de PostgreSQL. 
-
-Esta instrucción bloquea de forma pesimista el registro de la lista de espera evaluado en la transacción actual, y le indica a las transacciones simultáneas que "salten" el registro si ya está bloqueado, previniendo cuellos de botella (*deadlocks*) y garantizando una asignación atómica única.
+Para mitigar las condiciones de carrera (*Race Conditions*) en las que múltiples workers asíncronos concurrentes intenten tomar el mismo slot libre, utilizaremos la sintaxis **`FOR UPDATE OF a SKIP LOCKED`** y una **Expresión de Tabla Común (CTE)** en PostgreSQL que consulta los parámetros en caliente una sola vez por transacción.
 
 ```sql
--- Transacción atómica de asignación de slot liberado
-BEGIN;
-
--- 1. Capturar y bloquear al primer paciente en cola elegible para el slot liberado
-WITH next_patient AS (
-    SELECT id_espera, id_paciente, rango_deseado, tipo_cola
-    FROM waiting_list
-    WHERE estado = 'Pendiente'
-      AND id_especialidad = :id_especialidad_liberada
-      AND (
-          -- Condición A: Tipo FIFO general (sin rango)
-          tipo_cola = 'FechaCercana'
-          OR
-          -- Condición B: Rango deseado intersecta con la fecha del slot liberado
-          (tipo_cola = 'RangoEspecifico' AND rango_deseado @> :fecha_slot_liberada::date)
-          OR
-          -- Condición C (Regla Días Siguientes): Slot cae dentro de los 7 días posteriores a su rango deseado
-          (tipo_cola = 'RangoEspecifico' 
-           AND :fecha_slot_liberada::date > upper(rango_deseado) 
-           AND :fecha_slot_liberada::date <= upper(rango_deseado) + INTEGER '7')
-      )
-    ORDER BY created_at ASC -- FIFO estricto
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED -- Bloqueo pesimista concurrente y seguro
+-- CTE para leer parámetros en caliente y seleccionar paciente
+WITH params AS (
+    SELECT 
+        (SELECT param_value::int FROM system_parameters WHERE param_key = 'lookahead_dias') AS look_d
 )
--- 2. Actualizar el estado del registro seleccionado a 'Asignada'
-UPDATE waiting_list 
-SET estado = 'Asignada', updated_at = CURRENT_TIMESTAMP
-WHERE id_espera = (SELECT id_espera FROM next_patient)
-RETURNING id_paciente, tipo_cola;
-
--- 3. Si se halló un paciente en el paso anterior, asociarlo a la cita
-UPDATE appointments
-SET id_paciente = :id_paciente, estado = 'Agendada', updated_at = CURRENT_TIMESTAMP
-WHERE id_cita = :id_cita_liberada 
-  AND id_paciente IS NULL;
-
--- 4. Registrar la transacción en el Log de Auditoría para trazabilidad inmutable
-INSERT INTO audit_logs (usuario_email, operacion, detalle)
-VALUES (
-    'system_engine@clinicasalud.com', 
-    'UPDATE', 
-    'Asignación automática de slot de cita libre a paciente ' || :id_paciente || ' por motor LEA.'
-);
-
-COMMIT;
+SELECT wl.id_espera, wl.id_paciente, wl.tipo_cola, wl.rango_deseado, p.telefono, p.nombre_completo as paciente_nombre
+FROM waiting_list wl
+JOIN patients p ON wl.id_paciente = p.id_paciente
+CROSS JOIN params
+WHERE wl.estado = 'Pendiente'
+  AND wl.id_especialidad = :id_especialidad
+  AND wl.id_sede = :id_sede
+  AND (
+      wl.tipo_cola = 'FechaCercana'
+      OR (
+          wl.tipo_cola = 'RangoEspecifico'
+          AND wl.rango_deseado @> :fecha_cita::date
+      )
+      OR (
+          wl.tipo_cola = 'RangoEspecifico'
+          AND :fecha_cita::date > upper(wl.rango_deseado)
+          AND :fecha_cita::date <= upper(wl.rango_deseado) + params.look_d
+      )
+  )
+ORDER BY wl.created_at ASC
+LIMIT 1
+FOR UPDATE SKIP LOCKED;
 ```
 
 ---
 
 ## 3. Lógica del Backend en Python (Capa de Servicio)
 
-El siguiente script en Python/Flask implementa la validación transaccional complementaria y la regla de las 2 horas utilizando el micro-framework y SQLAlchemy:
+El backend en Python/psycopg2 implementa la validación transaccional complementaria y la regla de las 2 horas de amortiguación dinámica utilizando cursores seguros y control estricto de transacciones manuales:
 
 ```python
-from datetime import datetime, timedelta
-from database import db
-from models import Appointment, WaitingList, AuditLog
+class WaitingListEngine:
+    @staticmethod
+    def handle_liberated_slot(id_cita, realizado_por='Sistema', usuario_identificador='system_engine@clinicasalud.com'):
+        """
+        Controlador central del motor LEA.
+        Se activa al detectar la liberación de una cita o la apertura de nueva disponibilidad.
+        """
+        conn = Database.get_connection()
+        conn.autocommit = False
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            # 1. Bloquear y verificar cita
+            cursor.execute("SELECT ... FROM appointments WHERE id_cita = %s FOR UPDATE;", (id_cita,))
+            appointment = cursor.fetchone()
+            
+            # 2. Validar regla de amortiguación horaria en caliente
+            cursor.execute("SELECT param_value::int as buffer_horas FROM system_parameters WHERE param_key = 'buffer_horas';")
+            buffer_horas = cursor.fetchone()['buffer_horas']
+            
+            cita_inicio = appointment['rango_cita'].lower
+            now_utc = datetime.now(timezone.utc)
+            if cita_inicio.date() == now_utc.date():
+                if (cita_inicio - now_utc) < timedelta(hours=buffer_horas):
+                    conn.rollback()
+                    return None # No elegible para LEA
 
-def handle_liberated_slot(appointment_id: str):
-    """
-    Controlador central del motor LEA.
-    Se activa al detectar la cancelación de una cita o la apertura de nueva disponibilidad.
-    """
-    current_time = datetime.now(timezone.utc)
-    
-    # Obtener el slot liberado
-    slot = Appointment.query.get(appointment_id)
-    if not slot or slot.id_paciente is not None:
-        return  # Slot no existe o ya está ocupado
-
-    slot_start = slot.rango_cita.lower
-    
-    # REGLA DE LAS 2 HORAS: 
-    # Si la cita es para el día de hoy, debe existir un margen mínimo de 2 horas.
-    if slot_start.date() == current_time.date():
-        if (slot_start - current_time) < timedelta(hours=2):
-            # El slot queda libre en el pool público, no se asigna automáticamente a cola.
-            return
-
-    # Buscar el especialista y la especialidad correspondiente
-    doctor = slot.doctor
-    id_especialidad = doctor.id_especialidad
-    fecha_slot = slot_start.date()
-
-    # Ejecutar la lógica de asignación pesimista
-    # Se utiliza 'FOR UPDATE SKIP LOCKED' nativo en SQLAlchemy
-    patient_in_wait = db.session.query(WaitingList)\
-        .filter(WaitingList.estado == 'Pendiente')\
-        .filter(WaitingList.id_especialidad == id_especialidad)\
-        .filter(
-            (WaitingList.tipo_cola == 'FechaCercana') |
-            (WaitingList.rango_deseado.contains(fecha_slot)) |
-            (
-                (fecha_slot > WaitingList.rango_deseado.upper) &
-                (fecha_slot <= WaitingList.rango_deseado.upper + timedelta(days=7))
-            )
-        )\
-        .order_by(WaitingList.created_at.asc())\
-        .with_for_update(skip_locked=True)\
-        .first()
-
-    if patient_in_wait:
-        # 1. Asignar paciente al slot de cita
-        slot.id_paciente = patient_in_wait.id_paciente
-        slot.estado = 'Agendada'
-        
-        # 2. Actualizar registro en lista de espera
-        patient_in_wait.estado = 'Asignada'
-        patient_in_wait.updated_at = current_time
-
-        # 3. Registrar auditoría inmutable
-        audit = AuditLog(
-            usuario_email='sistema_automatizacion@clinica.com',
-            operacion='UPDATE',
-            detalle=f"Cita {appointment_id} asignada automáticamente a Paciente {patient_in_wait.id_paciente} vía cola de espera."
-        )
-        db.session.add(audit)
-        
-        # 4. Confirmar cambios atómicamente
-        db.session.commit()
-
-        # 5. Lanzar envío de SMS simulado asíncrono
-        trigger_sms_notification(patient_in_wait.id_paciente, slot_start)
-    else:
-        db.session.rollback()
+            # 3. Validar prioridad de coincidencia exacta por cancelación masiva
+            # (Si existe un paciente cancelado exactamente en este mismo rango, sede y especialidad)
+            ...
+            
+            # 4. Asignar de forma atómica y notificar
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
 ```
 
 ---
 
-## 4. Módulo de Modificación y Cancelación de Citas
+## 4. Módulo de Agendamiento, Modificación y Cancelación de Citas
 
-El sistema provee interfaces para cambiar o cancelar las citas, siguiendo las siguientes reglas estrictas:
-*   **Cancelación por el Paciente:** El paciente puede cancelar su cita libremente hasta **24 horas antes** del inicio del evento. Esto se realiza asíncronamente y dispara inmediatamente el evento `SLOT_CREATED` para el motor LEA.
-*   **Modificación de Cita (Reprogramación):** Para evitar solapamientos, la reprogramación es tratada atómicamente como una cancelación de la cita actual y la creación de una nueva en el nuevo bloque deseado.
+El sistema cuenta con reglas robustecidas para garantizar la integridad operativa y clínica:
+
+### 4.1. Cancelación Individual por el Paciente:
+*   El paciente puede cancelar su cita libremente siempre que falten al menos **`buffer_horas`** (obtenido dinámicamente, ej: 2 horas) de anticipación.
+*   Si cumple, la cita se libera (`id_paciente = NULL, estado = 'Agendada'`) y se dispara inmediatamente el evento de reasignación LEA para la cola de espera.
+
+### 4.2. Cambio de Sede con Geografía Estricta:
+*   Para evitar errores operativos, la Recepcionista o Paciente solo puede cambiar la sede física de una cita a sedes de la **misma ciudad de origen del paciente** (`patients.ciudad_origen`).
+*   Si el paciente se muda de ciudad, se debe actualizar primero su perfil del paciente para poder cambiar la sede de su cita.
+
+### 4.3. Cancelación Masiva por Contingencia y Reprogramación FIFO:
+*   Los Administradores (o Recepcionistas si cuentan con delegación de permisos) pueden ejecutar cancelaciones masivas de citas futuras por contingencias operativas (ej. ausencia médica o fallas en la sede).
+*   **Exportación de Reporte:** El sistema genera atómicamente un archivo CSV con la lista de pacientes y médicos afectados en el directorio local `storage/reports/` (simulador de Blob Storage).
+*   **Auto-reprogramación Cronológica:** Los pacientes afectados re-ingresan automáticamente a la lista de espera con estado `Pendiente`, pero con la propiedad `created_at` fijada a la hora de inicio de su cita original cancelada. Esto asegura que conserven prioridad cronológica exacta en futuras asignaciones del motor LEA.
+
+---
+
+## 5. Reglas Clínicas Avanzadas de Agendamiento
+
+### 5.1. Restricción de Doble Reserva Activa y Autorizaciones Clínicas:
+*   Un paciente no puede auto-agendar de forma activa más de una cita por especialidad al mismo tiempo para evitar acaparamiento.
+*   **Excepción:** Si el paciente cuenta con una derivación clínica registrada en `medical_authorizations` (ej. 10 sesiones de terapia), el sistema consume una sesión y le permite programar citas adicionales concurrentes para dicha especialidad.
+
+### 5.2. Bloqueo por Inasistencia Reiterada:
+*   Si un paciente acumula una cantidad parametrizable de inasistencias consecutivas (`max_inasistencias_consecutivas`, por defecto 3 marcas de `'NoAsistio'` seguidas), su portal de auto-agendamiento se suspende automáticamente por `dias_bloqueo_inasistencia` (ej. 15 días).
+*   Durante este período, el paciente solo podrá agendar citas de forma asistida a través del canal de la Recepcionista.
+
+### 5.3. Tiempo de Traslado Inter-Sede:
+*   Si un paciente programa dos citas el mismo día en sedes físicas distintas, el sistema valida que exista un margen mínimo de traslado de al menos `minutos_traslado_sedes` (por defecto 60 minutos) entre el fin de la primera cita y el inicio de la segunda para evitar cruces imposibles de cumplir.
