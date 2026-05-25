@@ -92,3 +92,6 @@ resumenes_clases/
 
 # --- Almacenamiento Local Simulador de Blob ---
 storage/
+
+# --- Roadmap de Control Local (Estrictamente Personal) ---
+ROADMAP.md
