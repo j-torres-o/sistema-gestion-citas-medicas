@@ -66,7 +66,7 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres_password@localhost:5432/sgcm_test
         FLASK_ENV: testing
       run: |
-        pytest -v --cov=. --cov-report=xml
+        python -m pytest -v --cov=. --cov-report=xml
 
     # 6. (Opcional) Subir reporte de Cobertura a un servicio de análisis
     - name: Upload Coverage Report
