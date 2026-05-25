@@ -6,9 +6,11 @@
 from services.notification_service import NotificationService
 from services.waiting_list_engine import WaitingListEngine
 from services.appointment_service import AppointmentService
+from services.permission_service import PermissionService
 
 __all__ = [
     'NotificationService',
     'WaitingListEngine',
-    'AppointmentService'
+    'AppointmentService',
+    'PermissionService'
 ]

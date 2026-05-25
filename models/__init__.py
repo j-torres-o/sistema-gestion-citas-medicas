@@ -1,26 +1,34 @@
 # ============================================================================
 # ARCHIVO: models/__init__.py
-# PROPÓSITO: Inicializador del paquete de modelos clínicos.
-#
-# Exporta de forma unificada todas las entidades del sistema clínico
-# para facilitar su importación desde rutas, workers y pruebas.
+# PROPÓSITO: Exportación unificada de todos los Modelos de Dominio del SGCM.
 # ============================================================================
 
 from models.entidad_base import EntidadBase
 from models.specialty import Specialty
-from models.doctor import Doctor
+from models.branch import Branch
+from models.user import User
+from models.system_parameter import SystemParameter
+from models.permission_delegation import PermissionDelegation
 from models.patient import Patient
+from models.doctor import Doctor
 from models.appointment import Appointment
 from models.waiting_list import WaitingList
 from models.audit import AppointmentHistory
+from models.medical_authorization import MedicalAuthorization
+from models.massive_cancellation import MassiveCancellation
 
-# Declaramos los exportados oficiales del paquete
 __all__ = [
     'EntidadBase',
     'Specialty',
-    'Doctor',
+    'Branch',
+    'User',
+    'SystemParameter',
+    'PermissionDelegation',
     'Patient',
+    'Doctor',
     'Appointment',
     'WaitingList',
-    'AppointmentHistory'
+    'AppointmentHistory',
+    'MedicalAuthorization',
+    'MassiveCancellation'
 ]

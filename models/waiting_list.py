@@ -8,7 +8,7 @@ from models.entidad_base import EntidadBase
 
 class WaitingList(EntidadBase):
     """
-    Modelo de Lista de Espera del SGCM.
+    Modelo de Lista de Espera del SGCM con soporte para sede.
     """
 
     TABLA = 'waiting_list'
@@ -17,14 +17,15 @@ class WaitingList(EntidadBase):
     TIPOS_COLA_VALIDOS = ['FechaCercana', 'RangoEspecifico']
     ESTADOS_VALIDOS = ['Pendiente', 'Asignada', 'Cancelada', 'Expirada']
 
-    def __init__(self, id_espera=None, id_paciente=None, id_especialidad=None, 
+    def __init__(self, id_espera=None, id_paciente=None, id_especialidad=None, id_sede=None,
                  tipo_cola='FechaCercana', rango_deseado=None, estado='Pendiente', 
                  created_at=None, updated_at=None):
         super().__init__(id=id_espera, created_at=created_at, updated_at=updated_at)
         self.id_paciente = id_paciente
         self.id_especialidad = id_especialidad
+        self.id_sede = id_sede
         self.tipo_cola = tipo_cola
-        self.rango_deseado = rango_deseado  # Mapeado a daterange, ej. '[2026-06-01, 2026-06-07]'
+        self.rango_deseado = rango_deseado  # Mapeado a daterange
         self.estado = estado
 
     def validar(self):
@@ -33,6 +34,8 @@ class WaitingList(EntidadBase):
             errores.append("Debe asociar la solicitud a un paciente válido.")
         if not self.id_especialidad:
             errores.append("Debe seleccionar la especialidad médica requerida.")
+        if not self.id_sede:
+            errores.append("Debe seleccionar la sede clínica de preferencia.")
         if self.tipo_cola not in self.TIPOS_COLA_VALIDOS:
             errores.append(f"El tipo de cola '{self.tipo_cola}' no es válido.")
         if self.estado not in self.ESTADOS_VALIDOS:
@@ -42,6 +45,6 @@ class WaitingList(EntidadBase):
         return errores
 
     def _get_campos_valores(self):
-        campos = ['id_paciente', 'id_especialidad', 'tipo_cola', 'rango_deseado', 'estado']
-        valores = [self.id_paciente, self.id_especialidad, self.tipo_cola, self.rango_deseado, self.estado]
+        campos = ['id_paciente', 'id_especialidad', 'id_sede', 'tipo_cola', 'rango_deseado', 'estado']
+        valores = [self.id_paciente, self.id_especialidad, self.id_sede, self.tipo_cola, self.rango_deseado, self.estado]
         return campos, valores

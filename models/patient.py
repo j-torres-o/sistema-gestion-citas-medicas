@@ -15,13 +15,15 @@ class Patient(EntidadBase):
     TABLA = 'patients'
     PK_COLUMNA = 'id_paciente'
 
-    def __init__(self, id_paciente=None, dni=None, nombre_completo=None, 
-                 telefono=None, email=None, created_at=None):
+    def __init__(self, id_paciente=None, id_usuario=None, dni=None, nombre_completo=None, 
+                 telefono=None, email=None, ciudad_origen='Medellin', created_at=None):
         super().__init__(id=id_paciente, created_at=created_at)
+        self.id_usuario = id_usuario
         self.dni = dni
         self.nombre_completo = nombre_completo
         self.telefono = telefono
         self.email = email
+        self.ciudad_origen = ciudad_origen
 
     def validar(self):
         errores = []
@@ -41,10 +43,13 @@ class Patient(EntidadBase):
         email_regex = r'^[\w\.-]+@[\w\.-]+\.\w+$'
         if not self.email or not re.match(email_regex, self.email):
             errores.append("El formato del correo electrónico ingresado no es válido.")
+
+        if not self.ciudad_origen or len(self.ciudad_origen.strip()) < 3:
+            errores.append("La ciudad de origen es obligatoria para validación geográfica.")
             
         return errores
 
     def _get_campos_valores(self):
-        campos = ['dni', 'nombre_completo', 'telefono', 'email']
-        valores = [self.dni, self.nombre_completo, self.telefono, self.email]
+        campos = ['id_usuario', 'dni', 'nombre_completo', 'telefono', 'email', 'ciudad_origen']
+        valores = [self.id_usuario, self.dni, self.nombre_completo, self.telefono, self.email, self.ciudad_origen]
         return campos, valores

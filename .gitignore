@@ -89,3 +89,6 @@ definicion_actividades/
 entregas/
 graficos/
 resumenes_clases/
+
+# --- Almacenamiento Local Simulador de Blob ---
+storage/
